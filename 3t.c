@@ -66,7 +66,7 @@ startup()
 // TODO figure out how this works or write own,
 //      refactor args to be 0 indexed.
 void
-draw_line(int x1, int y1, int x2, int y2, char c)
+draw_line(int x1, int y1, int x2, int y2, chtype c)
 {
     int x, y, dx, dy, dx1, dy1, px, py, xe, ye, i;
 
@@ -125,7 +125,7 @@ draw_line(int x1, int y1, int x2, int y2, char c)
 }
 
 void
-draw_tri(const tri *t, char c)
+draw_tri(const tri *t, chtype c)
 {
     draw_line(t->p[0].x, t->p[0].y, t->p[1].x, t->p[1].y, c);
     draw_line(t->p[1].x, t->p[1].y, t->p[2].x, t->p[2].y, c);
@@ -238,13 +238,14 @@ main()
             projected.p[1].x *= 0.5f * x_max; projected.p[1].y *= 0.5f * y_max;
             projected.p[2].x *= 0.5f * x_max; projected.p[2].y *= 0.5f * y_max;
 
-            draw_tri(&projected, 'O');
+            draw_tri(&projected, ACS_BLOCK);
         }
 
         mvprintw(2, 8, "Hello, world! %c", spinner[frame_cnt % (sizeof (spinner) - 1)]);
         mvprintw(4, 9, "win size: %d col, %d row", x_max, y_max);
         mvprintw(5, 8, "frame_cnt: %lld", frame_cnt);
-        mvprintw(6, 12, "theta: %04.2f * pi", (float)theta / M_PI);
+        mvprintw(6, 12, "theta: %04.2f", (float)theta / M_PI);
+        addch(ACS_PI);
 
         frame_cnt++;
         refresh();

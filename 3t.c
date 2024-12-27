@@ -66,6 +66,10 @@ startup()
     curs_set(0);
     scrollok(stdscr, FALSE);
     keypad(stdscr, TRUE);
+
+    // color
+    start_color();
+    use_default_colors();
 }
 
 // adapted from:
@@ -318,12 +322,34 @@ main()
     // Needed for the perspective transform.
     float near = 0.1f;
     float far = 1000.0f;
-    float fov = 75.0f;
+    float fov = 86.0f;
 
     mat4x4 rot_z = {0};
     mat4x4 rot_x = {0};
 
     vec3 camera = {0};
+
+    // Colors
+    // TODO: Clean up colors.
+    short default_pair = 0;
+    init_pair(default_pair, -1, -1);
+    size_t shades = 128;
+    for(short i = 0; i <= shades && i < COLOR_PAIRS-1; i++) {
+        init_color(i + 8,
+                   (short)((float)i * (1000.0f / (float)shades)),
+                   (short)((float)i * (1000.0f / (float)shades)),
+                   (short)((float)i * (1000.0f / (float)shades)));
+        init_pair((short)i+1, i+8, -1);
+    }
+    scrollok(stdscr, true);
+    short r, g, b;
+    for(int i = 0; i <= shades && i < COLOR_PAIRS-1; i++) {
+        color_content(i+8, &r, &g, &b);
+        printw("color %d: (%4d, %4d, %4d)\n", i+8, r, g, b);
+    }
+    getch();
+    scrollok(stdscr, false);
+    clear();
 
     int y_max, x_max;
     getmaxyx(stdscr, y_max, x_max);
@@ -410,13 +436,23 @@ main()
             normal.y /= l;
             normal.z /= l;
 
-            // Apply dot product to the normal and camera vector to find
-            // if face should be drawn.
+            // Should this face be drawn?
             float D = normal.x*(translated.p[0].x - camera.x)
                       + normal.y*(translated.p[0].y - camera.y)
                       + normal.z*(translated.p[0].z - camera.z);
 
             if(D < 0.0f) {
+                // global illumination
+                vec3 light = { 0.0f, 0.0f, -1.0f };
+                // normalize
+                float l = sqrtf(powf(light.x, 2)
+                                + powf(light.y, 2)
+                                + powf(light.z, 2));
+                light.x /= l; light.y /= l; light.z /= l;
+                float light_dp = light.x * normal.x
+                                 + light.y * normal.y
+                                + light.z * normal.z;
+
                 // Apply perspective transform to each point,
                 // that is, project triangle from 3d into 2d.
                 mul_mat_vec(&mat_proj, &translated.p[0], &projected.p[0]);
@@ -435,11 +471,20 @@ main()
                 projected.p[2].x *= 0.5f * (float)x_max;
                 projected.p[2].y *= 0.5f * (float)y_max;
 
+                // if(light_dp < 0.5f) {
+                //     attr_set(A_NORMAL, color_white, NULL);
+                //     fill_tri(&projected, ACS_BLOCK);
+                // } else {
+                //     attr_set(A_BOLD, color_white, NULL);
+                //     fill_tri(&projected, ACS_BLOCK);
+                // }
+                color_set((short)(1.0f + (light_dp * (float)shades)), NULL);
                 fill_tri(&projected, ACS_BLOCK);
-                // draw_tri(&projected, ACS_BLOCK);
-                draw_tri(&projected, ' ');
+                // draw_tri(&projected, ' ');
             }
         }
+        color_set(default_pair, NULL);
+        //attr_set(A_NORMAL, default_pair, NULL);
 
         mvprintw(2, 8, "Hello, world! %c", spinner[frame_cnt % (sizeof (spinner) - 1)]);
         mvprintw(4, 9, "win size: %d col, %d row", x_max, y_max);

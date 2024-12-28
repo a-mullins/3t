@@ -1,6 +1,11 @@
 // NB: I have conciously chosen to do precious little error handling
 // in this program. It is primarily educational. If you choose to use
 // portions of this code, do so with that in mind.
+
+// This is necessary to enable ncurses wide character support,
+// at least with how it is packaged in Arch.
+#define _XOPEN_SOURCE_EXTENDED
+
 #include <locale.h>
 #include <math.h>    // for sinf(), cosf(), tanf(), M_PI
 #include <ncurses.h>
@@ -9,6 +14,7 @@
 #include <stdlib.h>  // for abs()
 #include <string.h>  // memcpy()
 #include <unistd.h>  // for usleep()
+#include <wchar.h>   // for wint_t, wchar_t, etc.
 #include "darray.h"
 
 #define LEN(XS) (sizeof (XS) / sizeof (XS[0]))
@@ -38,7 +44,7 @@ typedef struct mat4x4 {
 } mat4x4;
 
 void
-startup()
+ncurses_startup()
 {
     // per the advice of `man ncurses`
     setlocale(LC_ALL, "");
@@ -49,6 +55,7 @@ startup()
     // ncurses options
     cbreak();
     noecho();
+    nodelay(stdscr, TRUE);
     curs_set(0);
     scrollok(stdscr, FALSE);
     keypad(stdscr, TRUE);
@@ -63,7 +70,7 @@ startup()
 // TODO figure out how this works or write own,
 //      refactor args to be 0 indexed.
 void
-draw_line(int x1, int y1, int x2, int y2, chtype c)
+draw_line(int x1, int y1, int x2, int y2, const cchar_t *wch)
 {
     int x, y, dx, dy, dx1, dy1, px, py, xe, ye, i;
 
@@ -79,7 +86,7 @@ draw_line(int x1, int y1, int x2, int y2, chtype c)
             x = x2; y = y2; xe = x1;
         }
 
-        mvaddch(y, x, c);
+        mvadd_wch(y, x, wch);
         //Draw(x, y, c, col);
 
         for (i = 0; x<xe; i++) {
@@ -91,7 +98,7 @@ draw_line(int x1, int y1, int x2, int y2, chtype c)
                 if ((dx<0 && dy<0) || (dx>0 && dy>0)) y = y + 1; else y = y - 1;
                 px = px + 2 * (dy1 - dx1);
             }
-            mvaddch(y, x, c);
+            mvadd_wch(y, x, wch);
             // Draw(x, y, c, col);
         }
     }
@@ -103,7 +110,7 @@ draw_line(int x1, int y1, int x2, int y2, chtype c)
             x = x2; y = y2; ye = y1;
         }
 
-        mvaddch(y, x, c);
+        mvadd_wch(y, x, wch);
         // Draw(x, y, c, col);
 
         for (i = 0; y<ye; i++) {
@@ -115,18 +122,18 @@ draw_line(int x1, int y1, int x2, int y2, chtype c)
                 if ((dx<0 && dy<0) || (dx>0 && dy>0)) x = x + 1; else x = x - 1;
                 py = py + 2 * (dx1 - dy1);
             }
-            mvaddch(y, x, c);
+            mvadd_wch(y, x, wch);
             // Draw(x, y, c, col);
         }
     }
 }
 
 void
-draw_tri(const tri *t, chtype c)
+draw_tri(const tri *t, const cchar_t *wch)
 {
-    draw_line((int)t->p[0].x, (int)t->p[0].y, (int)t->p[1].x, (int)t->p[1].y, c);
-    draw_line((int)t->p[1].x, (int)t->p[1].y, (int)t->p[2].x, (int)t->p[2].y, c);
-    draw_line((int)t->p[2].x, (int)t->p[2].y, (int)t->p[0].x, (int)t->p[0].y, c);
+    draw_line((int)t->p[0].x, (int)t->p[0].y, (int)t->p[1].x, (int)t->p[1].y, wch);
+    draw_line((int)t->p[1].x, (int)t->p[1].y, (int)t->p[2].x, (int)t->p[2].y, wch);
+    draw_line((int)t->p[2].x, (int)t->p[2].y, (int)t->p[0].x, (int)t->p[0].y, wch);
 }
 
 // adapted from:
@@ -135,7 +142,7 @@ draw_tri(const tri *t, chtype c)
 //   https://www.avrfreaks.net/sites/default/files/triangles.c
 // TODO figure out how this works or write own. :)
 void
-fill_tri(const tri *t, chtype c)
+fill_tri(const tri *t, const cchar_t *wch)
 {
     int x1 = (int)t->p[0].x;
     int x2 = (int)t->p[1].x;
@@ -215,7 +222,9 @@ fill_tri(const tri *t, chtype c)
 	if (minx>t1x) minx = t1x; if (minx>t2x) minx = t2x;
 	if (maxx<t1x) maxx = t1x; if (maxx<t2x) maxx = t2x;
         //drawline(minx, maxx, y);    // Draw line from min to max points found on the y
-        for(int i = minx; i <= maxx; i++) { mvaddch(y, i, c); }
+        for(int i = minx; i <= maxx; i++) {
+            mvadd_wch(y, i, wch);
+        }
 	// Now increase y
 	if (!changed1) t1x += signx1;
 	t1x += t1xp;
@@ -273,7 +282,9 @@ fill_tri(const tri *t, chtype c)
 	if (minx>t1x) minx = t1x; if (minx>t2x) minx = t2x;
 	if (maxx<t1x) maxx = t1x; if (maxx<t2x) maxx = t2x;
 	//drawline(minx, maxx, y);
-        for(int i = minx; i <= maxx; i++) { mvaddch(y, i, c); }
+        for(int i = minx; i <= maxx; i++) {
+            mvadd_wch(y, i, wch);
+        }
 	if (!changed1) t1x += signx1;
 	t1x += t1xp;
 	if (!changed2) t2x += signx2;
@@ -382,22 +393,15 @@ z_sort(const void *a, const void *b)
 int
 main()
 {
-    mesh m = {.len = 0, .tris = NULL};
-    // load_mesh("/home/alm/Code/3t/cube.obj", &m);
-    // load_mesh("/home/alm/Code/3t/ship.obj", &m);
-    load_mesh("/home/alm/Code/3t/snowflake.obj", &m);
+    int ms_len = 3;
+    int ms_i = 0;
+    mesh ms[3] = { 0 };
+    wchar_t *ms_str[3] = {L"snowflake.obj", L"cube.obj", L"faux-wing.obj"};
+    load_mesh("/home/alm/Code/3t/snowflake.obj", &ms[0]);
+    load_mesh("/home/alm/Code/3t/cube.obj", &ms[1]);
+    load_mesh("/home/alm/Code/3t/ship.obj", &ms[2]);
 
-    // tri t;
-    // for(size_t i = 0; i < m.len; i++) {
-    //     memset(&t, 0, sizeof (tri));
-    //     t = *(m.tris + i);
-    //     printf("face %d:\n", i+1);
-    //     for(short j = 0; j < 3; j++) {
-    //         printf("\t%f %f %f\n", t.p[j].x, t.p[j].y, t.p[j].z);
-    //     }
-    // }
-
-    startup();
+    ncurses_startup();
 
     // Needed for the perspective transform.
     float near = 0.1f;
@@ -421,29 +425,47 @@ main()
                    (short)((float)i * (1000.0f / (float)shades)));
         init_pair((short)i+1, i+8, -1);
     }
-    // scrollok(stdscr, true);
-    // short r, g, b;
-    // for(int i = 0; i <= shades && i < COLOR_PAIRS-1; i++) {
-    //     color_content(i+8, &r, &g, &b);
-    //     printw("color %d: (%4d, %4d, %4d)\n", i+8, r, g, b);
-    // }
-    // getch();
-    // scrollok(stdscr, false);
-    // clear();
 
     int y_max, x_max;
     getmaxyx(stdscr, y_max, x_max);
     char spinner[] = "__--==^^^^==--__";
     unsigned long long frame_cnt = 0;
     //float target_fps = 15;
+    darray tris_to_draw;
+    darray_init(&tris_to_draw, sizeof (tri));
 
+    typedef enum render_mode {SHADED, WIREFRAME, OUTLINED, NUM} render_mode;
+    wchar_t *render_mode_str[NUM] = {L"shaded", L"wireframe", L"outlined"};
+    render_mode mode = SHADED;
+
+    // MAIN LOOP
     while( 1 ) {
         getmaxyx(stdscr, y_max, x_max);
-        move(0, 0);
-        erase();
+        //move(0, 0);
+        //erase();
+
+        // TODO handle the wint_t better (maybe use wctobs?)
+        wint_t key_pressed = 0;
+        while(get_wch(&key_pressed) != ERR) {
+            switch(key_pressed) {
+            case 'q':
+                goto cleanup;
+                break;
+            case 'm':
+                mode = (mode + 1) % NUM;
+                break;
+            case KEY_RIGHT:
+                ms_i = (ms_i + 1) % ms_len;
+                break;
+            case KEY_LEFT:
+                if (ms_i == 0) {ms_i = ms_len-1;}
+                else           {ms_i = ms_i - 1;}
+                break;
+            }
+        }
 
         // Transform needs to be recalculated in case the window size changes.
-        // The 2x coeff to the aspect ratio is to corret for the fact that
+        // The 2x coeff to the aspect ratio is to correct for the fact that
         // characters are not square.
         float aspect = 2 * ((float)y_max / (float)x_max);
         float fov_rad = 1 / tanf(fov * 0.5f / 180.0f * (float)M_PI);
@@ -472,15 +494,14 @@ main()
 
         // Cull.
         // Collect only the triangles we want to draw.
-        darray tris_to_draw;
-        darray_init(&tris_to_draw, sizeof (tri));
+        darray_clear(&tris_to_draw);
 
-        for(size_t i = 0; i < m.len; i++) {
+        for(size_t i = 0; i < ms[ms_i].len; i++) {
             // we must use seperate vars for each input and output,
             // because mul_mat_vec assumes the input vector doesn't
             // change.
             tri t, translated, rotated_z, rotated_zx;
-            t = *(m.tris + i);
+            t = *(ms[ms_i].tris + i);
 
             // Rotate around z axis.
             mul_mat_vec(&rot_z, &t.p[0], &rotated_z.p[0]);
@@ -494,9 +515,21 @@ main()
 
             // Translate forward, away from camera.
             translated = rotated_zx;
-            translated.p[0].z += 2.0f;
-            translated.p[1].z += 2.0f;
-            translated.p[2].z += 2.0f;
+            if(ms_i == 0) {
+                translated.p[0].z += 2.0f;
+                translated.p[1].z += 2.0f;
+                translated.p[2].z += 2.0f;
+            }
+            if(ms_i == 1) {
+                translated.p[0].z += 1.0f;
+                translated.p[1].z += 1.0f;
+                translated.p[2].z += 1.0f;
+            }
+            if(ms_i == 2) {
+                translated.p[0].z += 6.0f;
+                translated.p[1].z += 6.0f;
+                translated.p[2].z += 6.0f;
+            }
 
             // Find triangle normal.
             vec3 normal, line0, line1;
@@ -532,11 +565,13 @@ main()
 
         // Sort triangles by z-depth, so that ones farther away can be
         // drawn before closer ones. This is the painter's algorithm.
-        // TODO stub
         qsort(tris_to_draw.buf,
               tris_to_draw.len,
               tris_to_draw.elem_size,
               z_sort);
+
+        // Clear screen before we draw.
+        erase();
 
         // Draw the triangles.
         for(size_t i = 0; i < tris_to_draw.len; i++) {
@@ -588,6 +623,7 @@ main()
             projected.p[0].x += 1.0f; projected.p[0].y += 1.0f;
             projected.p[1].x += 1.0f; projected.p[1].y += 1.0f;
             projected.p[2].x += 1.0f; projected.p[2].y += 1.0f;
+
             projected.p[0].x *= 0.5f * (float)x_max;
             projected.p[0].y *= 0.5f * (float)y_max;
             projected.p[1].x *= 0.5f * (float)x_max;
@@ -597,26 +633,55 @@ main()
 
             // TODO can we supply the naked short, or do we need to
             // use the COLOR_PAIR macro?
-            color_set((short)(1.0f + (light_dp * (float)shades)), NULL);
-            fill_tri(&projected, ACS_BLOCK);
-            // draw_tri(&projected, ' ');
+            //color_set((short)(1.0f + (light_dp * (float)shades)), NULL);
+            short color_pair = (short)(1.0f + (light_dp * (float)shades));
+
+            cchar_t wch_full;
+            wchar_t wc_full[] = L"\u2588";
+            setcchar(&wch_full, wc_full, A_NORMAL, color_pair, NULL);
+
+            cchar_t wch_blank;
+            wchar_t wc_blank[] = L" ";
+            setcchar(&wch_blank, wc_blank, A_NORMAL, color_pair, NULL);
+
+            if(mode == SHADED) {
+                fill_tri(&projected, &wch_full);
+            } else if (mode == OUTLINED) {
+                fill_tri(&projected, &wch_full);
+                draw_tri(&projected, &wch_blank);
+            } else {
+                draw_tri(&projected, &wch_full);
+            }
         }
 
-        // Reset to prepare for overlays and the next frame.
-        color_set(default_pair, NULL);
-        //attr_set(A_NORMAL, default_pair, NULL);
+        wchar_t ws_buf[80] = { 0 };
+        swprintf(ws_buf, 80, L"mesh: %ls", ms_str[ms_i]);
+        mvaddwstr(0, 7, ws_buf);
 
-        mvprintw(2, 8, "Hello, world! %c", spinner[frame_cnt % (sizeof (spinner) - 1)]);
-        mvprintw(4, 9, "win size: %d col, %d row", x_max, y_max);
-        mvprintw(5, 8, "frame_cnt: %lld", frame_cnt);
-        mvprintw(6, 12, "theta: %04.2f", (float)theta / M_PI);
-        addch(ACS_PI);
+        swprintf(ws_buf, 80, L"render mode: %ls", render_mode_str[mode]);
+        mvaddwstr(1, 0, ws_buf);
+
+        swprintf(ws_buf, 80, L"term size: %d col, %d row", x_max, y_max);
+        mvaddwstr(2, 2, ws_buf);
+
+        swprintf(ws_buf, 80, L"frame count: %d", frame_cnt);
+        mvaddwstr(3, 0, ws_buf);
+
+        swprintf(ws_buf, 80, L"\u03B8: %f\u03c0", (float)theta / M_PI);
+        mvaddwstr(4, 10, ws_buf);
+
+        // mvprintw(6, 12, "theta: %04.2f", (float)theta / M_PI);
 
         frame_cnt++;
         refresh();
-        usleep(66700);
+        // TODO a better thing to do would be to calculate delta
+        //      between frames and then sleep an appropriate amount.
+        //usleep(16665);
+        usleep(33330);
+        //usleep(66700);
     }
 
+cleanup:
     // CLEANUP
     endwin();
     return 0;

@@ -5,7 +5,9 @@
 #include <math.h>    // for sinf(), cosf(), tanf(), M_PI
 #include <ncurses.h>
 #include <stdbool.h>
+#include <stdio.h>   // fopen, fprintf, etc
 #include <stdlib.h>  // for abs()
+#include <string.h>  // memcpy()
 #include <unistd.h>  // for usleep()
 
 #define LEN(XS) (sizeof (XS) / sizeof (XS[0]))
@@ -24,6 +26,11 @@ typedef struct vec3 {
 typedef struct tri {
     vec3 p[3];
 } tri;
+
+typedef struct mesh {
+    int len;
+    tri *tris;
+} mesh;
 
 typedef struct mat4x4 {
     float m[4][4];
@@ -314,9 +321,89 @@ mul_mat_vec(const mat4x4 *m, const vec3 *i, vec3 *o) {
     }
 }
 
+bool load_mesh(const char *path, mesh *m) {
+    FILE *fp = fopen(path, "r");
+    if(fp == NULL) {fprintf(stderr, "couldn't open %s", path); return false;}
+
+    size_t vec_cap = 16;
+    size_t vec_len = 0;
+    vec3 *vecs = calloc(vec_cap, sizeof (vec3));
+
+    if(m->tris != NULL ) {fprintf(stderr, "passed non-empty mesh"); return false;}
+
+    char line[80];
+
+    // Scan for verticies.
+    vec3 v;
+    while(fgets(line, 80, fp) != NULL) {
+        if(line[0] != 'v') { continue; }
+
+        // TODO error handling
+        int n = sscanf(line, "v %f %f %f", &v.x, &v.y, &v.z);
+
+        if(vec_len + 1 >= vec_cap) {
+            vec_cap <<= 1;
+            // TODO error handling
+            vecs = realloc(vecs, vec_cap * sizeof (vec3));
+        }
+
+        *(vecs + vec_len) = v;
+        vec_len++;
+    }
+
+    rewind(fp);
+
+    size_t tri_cap = 16;
+    size_t tri_len = 0;
+    tri *tris = calloc(tri_cap, sizeof (tri));
+
+    // Scan for faces.
+    tri t;
+    int i_x, i_y, i_z;
+    while(fgets(line, 80, fp) != NULL) {
+        if(line[0] != 'f') { continue; }
+
+        // TODO error handling
+        int n = sscanf(line, "f %d %d %d", &i_x, &i_y, &i_z);
+        t.p[0] = *(vecs + i_x - 1);
+        t.p[1] = *(vecs + i_y - 1);
+        t.p[2] = *(vecs + i_z - 1);
+
+        if(tri_len + 1 >= tri_cap) {
+            tri_cap <<= 1;
+            // TODO error handling
+            tris = realloc(tris, tri_cap * sizeof (tri));
+        }
+
+        *(tris + tri_len) = t;
+        tri_len++;
+    }
+
+    m->len = tri_len;
+    m->tris = calloc(tri_len, sizeof (tri));
+    memcpy(m->tris, tris, tri_len * sizeof (tri));
+
+    return true;
+}
+
 int
 main()
 {
+    mesh m = {.len = 0, .tris = NULL};
+    // load_mesh("/home/alm/Code/3t/cube.obj", &m);
+    // load_mesh("/home/alm/Code/3t/ship.obj", &m);
+    load_mesh("/home/alm/Code/3t/snowflake.obj", &m);
+
+    // tri t;
+    // for(size_t i = 0; i < m.len; i++) {
+    //     memset(&t, 0, sizeof (tri));
+    //     t = *(m.tris + i);
+    //     printf("face %d:\n", i+1);
+    //     for(short j = 0; j < 3; j++) {
+    //         printf("\t%f %f %f\n", t.p[j].x, t.p[j].y, t.p[j].z);
+    //     }
+    // }
+
     startup();
 
     // Needed for the perspective transform.
@@ -341,15 +428,15 @@ main()
                    (short)((float)i * (1000.0f / (float)shades)));
         init_pair((short)i+1, i+8, -1);
     }
-    scrollok(stdscr, true);
-    short r, g, b;
-    for(int i = 0; i <= shades && i < COLOR_PAIRS-1; i++) {
-        color_content(i+8, &r, &g, &b);
-        printw("color %d: (%4d, %4d, %4d)\n", i+8, r, g, b);
-    }
-    getch();
-    scrollok(stdscr, false);
-    clear();
+    // scrollok(stdscr, true);
+    // short r, g, b;
+    // for(int i = 0; i <= shades && i < COLOR_PAIRS-1; i++) {
+    //     color_content(i+8, &r, &g, &b);
+    //     printw("color %d: (%4d, %4d, %4d)\n", i+8, r, g, b);
+    // }
+    // getch();
+    // scrollok(stdscr, false);
+    // clear();
 
     int y_max, x_max;
     getmaxyx(stdscr, y_max, x_max);
@@ -391,12 +478,12 @@ main()
         rot_x.m[3][3] = 1;
 
         // Draw the unit cube.
-        for(size_t i = 0; i < LEN(unit_cube); i++) {
+        for(size_t i = 0; i < m.len; i++) {
             // we must use seperate vars for each input and output,
             // because mul_mat_vec assumes the input vector doesn't
             // change.
             tri t, projected, translated, rotated_z, rotated_zx;
-            t = unit_cube[i];
+            t = *(m.tris + i);
 
             // Rotate around z axis.
             mul_mat_vec(&rot_z, &t.p[0], &rotated_z.p[0]);
@@ -471,13 +558,8 @@ main()
                 projected.p[2].x *= 0.5f * (float)x_max;
                 projected.p[2].y *= 0.5f * (float)y_max;
 
-                // if(light_dp < 0.5f) {
-                //     attr_set(A_NORMAL, color_white, NULL);
-                //     fill_tri(&projected, ACS_BLOCK);
-                // } else {
-                //     attr_set(A_BOLD, color_white, NULL);
-                //     fill_tri(&projected, ACS_BLOCK);
-                // }
+                // TODO can we supply the naked short, or do we need to
+                // use the COLOR_PAIR macro?
                 color_set((short)(1.0f + (light_dp * (float)shades)), NULL);
                 fill_tri(&projected, ACS_BLOCK);
                 // draw_tri(&projected, ' ');

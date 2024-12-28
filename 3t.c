@@ -36,28 +36,6 @@ typedef struct mat4x4 {
     float m[4][4];
 } mat4x4;
 
-// All of these braces are to make gcc -Wmissing-braces happy.
-static const tri unit_cube[] = {
-    // SOUTH
-    {.p = {{0.0f, 0.0f, 0.0f}, {0.0f, 1.0f, 0.0f}, {1.0f, 1.0f, 0.0f}}},
-    {.p = {{0.0f, 0.0f, 0.0f}, {1.0f, 1.0f, 0.0f}, {1.0f, 0.0f, 0.0f}}},
-    // EAST
-    {.p = {{1.0f, 0.0f, 0.0f}, {1.0f, 1.0f, 0.0f}, {1.0f, 1.0f, 1.0f}}},
-    {.p = {{1.0f, 0.0f, 0.0f}, {1.0f, 1.0f, 1.0f}, {1.0f, 0.0f, 1.0f}}},
-    // NORTH
-    {.p = {{1.0f, 0.0f, 1.0f}, {1.0f, 1.0f, 1.0f}, {0.0f, 1.0f, 1.0f}}},
-    {.p = {{1.0f, 0.0f, 1.0f}, {0.0f, 1.0f, 1.0f}, {0.0f, 0.0f, 1.0f}}},
-    // WEST
-    {.p = {{0.0f, 0.0f, 1.0f}, {0.0f, 1.0f, 1.0f}, {0.0f, 1.0f, 0.0f}}},
-    {.p = {{0.0f, 0.0f, 1.0f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f, 0.0f}}},
-    // TOP
-    {.p = {{0.0f, 1.0f, 0.0f}, {0.0f, 1.0f, 1.0f}, {1.0f, 1.0f, 1.0f}}},
-    {.p = {{0.0f, 1.0f, 0.0f}, {1.0f, 1.0f, 1.0f}, {1.0f, 1.0f, 0.0f}}},
-    // BOTTOM
-    {.p = {{1.0f, 0.0f, 1.0f}, {0.0f, 0.0f, 1.0f}, {0.0f, 0.0f, 0.0f}}},
-    {.p = {{1.0f, 0.0f, 1.0f}, {0.0f, 0.0f, 0.0f}, {1.0f, 0.0f, 0.0f}}},
-};
-
 void
 startup()
 {
@@ -477,7 +455,7 @@ main()
         rot_x.m[2][2] = cosf(theta * 0.5f);
         rot_x.m[3][3] = 1;
 
-        // Draw the unit cube.
+        // Draw the triangles.
         for(size_t i = 0; i < m.len; i++) {
             // we must use seperate vars for each input and output,
             // because mul_mat_vec assumes the input vector doesn't

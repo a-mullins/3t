@@ -9,6 +9,7 @@
 #include <stdlib.h>  // for abs()
 #include <string.h>  // memcpy()
 #include <unistd.h>  // for usleep()
+#include "darray.h"
 
 #define LEN(XS) (sizeof (XS) / sizeof (XS[0]))
 
@@ -365,6 +366,20 @@ bool load_mesh(const char *path, mesh *m) {
 }
 
 int
+z_sort(const void *a, const void *b)
+{
+    tri t1 = *(tri *)a;
+    tri t2 = *(tri *)b;
+
+    float t1_z_mid = (t1.p[0].z + t1.p[1].z + t1.p[2].z) / 3.0f;
+    float t2_z_mid = (t2.p[0].z + t2.p[1].z + t2.p[2].z) / 3.0f;
+
+    if(t1_z_mid < t2_z_mid) return  1;
+    if(t1_z_mid > t2_z_mid) return -1;
+    return 0;
+}
+
+int
 main()
 {
     mesh m = {.len = 0, .tris = NULL};
@@ -433,11 +448,11 @@ main()
         float aspect = 2 * ((float)y_max / (float)x_max);
         float fov_rad = 1 / tanf(fov * 0.5f / 180.0f * (float)M_PI);
         mat4x4 mat_proj = { .m = {
-            {aspect * fov_rad, 0.0f,    0.0f,                       0.0f},
-            {0.0f,             fov_rad, 0.0f,                       0.0f},
-            {0.0f,             0.0f,    far / (far - near),         1.0f},
-            {0.0f,             0.0f,    (-far*near) / (far - near), 0.0f}
-        }};
+                {aspect * fov_rad, 0.0f,    0.0f,                       0.0f},
+                {0.0f,             fov_rad, 0.0f,                       0.0f},
+                {0.0f,             0.0f,    far / (far - near),         1.0f},
+                {0.0f,             0.0f,    (-far*near) / (far - near), 0.0f}
+            }};
 
         float theta = (float)frame_cnt / 15.0f / (float)(0.5f*M_PI);
 
@@ -455,12 +470,16 @@ main()
         rot_x.m[2][2] = cosf(theta * 0.5f);
         rot_x.m[3][3] = 1;
 
-        // Draw the triangles.
+        // Cull.
+        // Collect only the triangles we want to draw.
+        darray tris_to_draw;
+        darray_init(&tris_to_draw, sizeof (tri));
+
         for(size_t i = 0; i < m.len; i++) {
             // we must use seperate vars for each input and output,
             // because mul_mat_vec assumes the input vector doesn't
             // change.
-            tri t, projected, translated, rotated_z, rotated_zx;
+            tri t, translated, rotated_z, rotated_zx;
             t = *(m.tris + i);
 
             // Rotate around z axis.
@@ -503,46 +522,87 @@ main()
 
             // Should this face be drawn?
             float D = normal.x*(translated.p[0].x - camera.x)
-                      + normal.y*(translated.p[0].y - camera.y)
-                      + normal.z*(translated.p[0].z - camera.z);
+                + normal.y*(translated.p[0].y - camera.y)
+                + normal.z*(translated.p[0].z - camera.z);
 
             if(D < 0.0f) {
-                // global illumination
-                vec3 light = { 0.0f, 0.0f, -1.0f };
-                // normalize
-                float l = sqrtf(powf(light.x, 2)
-                                + powf(light.y, 2)
-                                + powf(light.z, 2));
-                light.x /= l; light.y /= l; light.z /= l;
-                float light_dp = light.x * normal.x
-                                 + light.y * normal.y
-                                + light.z * normal.z;
-
-                // Apply perspective transform to each point,
-                // that is, project triangle from 3d into 2d.
-                mul_mat_vec(&mat_proj, &translated.p[0], &projected.p[0]);
-                mul_mat_vec(&mat_proj, &translated.p[1], &projected.p[1]);
-                mul_mat_vec(&mat_proj, &translated.p[2], &projected.p[2]);
-
-                // Each point has a range of -1 to +1, so it must be
-                // scaled into screen space.
-                projected.p[0].x += 1.0f; projected.p[0].y += 1.0f;
-                projected.p[1].x += 1.0f; projected.p[1].y += 1.0f;
-                projected.p[2].x += 1.0f; projected.p[2].y += 1.0f;
-                projected.p[0].x *= 0.5f * (float)x_max;
-                projected.p[0].y *= 0.5f * (float)y_max;
-                projected.p[1].x *= 0.5f * (float)x_max;
-                projected.p[1].y *= 0.5f * (float)y_max;
-                projected.p[2].x *= 0.5f * (float)x_max;
-                projected.p[2].y *= 0.5f * (float)y_max;
-
-                // TODO can we supply the naked short, or do we need to
-                // use the COLOR_PAIR macro?
-                color_set((short)(1.0f + (light_dp * (float)shades)), NULL);
-                fill_tri(&projected, ACS_BLOCK);
-                // draw_tri(&projected, ' ');
+                darray_push(&tris_to_draw, &translated);
             }
         }
+
+        // Sort triangles by z-depth, so that ones farther away can be
+        // drawn before closer ones. This is the painter's algorithm.
+        // TODO stub
+        qsort(tris_to_draw.buf,
+              tris_to_draw.len,
+              tris_to_draw.elem_size,
+              z_sort);
+
+        // Draw the triangles.
+        for(size_t i = 0; i < tris_to_draw.len; i++) {
+            tri t = *(tri *)darray_get(&tris_to_draw, i);
+
+            // find tri normal
+            vec3 normal, line0, line1;
+            line0.x = t.p[1].x - t.p[0].x;
+            line0.y = t.p[1].y - t.p[0].y;
+            line0.z = t.p[1].z - t.p[0].z;
+
+            line1.x = t.p[2].x - t.p[0].x;
+            line1.y = t.p[2].y - t.p[0].y;
+            line1.z = t.p[2].z - t.p[0].z;
+
+            // Cross product, to find normal.
+            normal.x = line0.y * line1.z - line0.z * line1.y;
+            normal.y = line0.z * line1.x - line0.x * line1.z;
+            normal.z = line0.x * line1.y - line0.y * line1.x;
+
+            // Normalize the normal vector. :-)
+            float l = sqrtf(powf(normal.x, 2)
+                            + powf(normal.y, 2)
+                            + powf(normal.z, 2));
+            normal.x /= l;
+            normal.y /= l;
+            normal.z /= l;
+
+            // global illumination
+            vec3 light = { 0.0f, 0.0f, -1.0f };
+            // normalize light vec
+            l = sqrtf(powf(light.x, 2)
+                      + powf(light.y, 2)
+                      + powf(light.z, 2));
+            light.x /= l; light.y /= l; light.z /= l;
+            float light_dp = light.x * normal.x
+                + light.y * normal.y
+                + light.z * normal.z;
+
+            tri projected = {0};
+            // Apply perspective transform to each point,
+            // that is, project triangle from 3d into 2d.
+            mul_mat_vec(&mat_proj, &t.p[0], &projected.p[0]);
+            mul_mat_vec(&mat_proj, &t.p[1], &projected.p[1]);
+            mul_mat_vec(&mat_proj, &t.p[2], &projected.p[2]);
+
+            // Each point has a range of -1 to +1, so it must be
+            // scaled into screen space.
+            projected.p[0].x += 1.0f; projected.p[0].y += 1.0f;
+            projected.p[1].x += 1.0f; projected.p[1].y += 1.0f;
+            projected.p[2].x += 1.0f; projected.p[2].y += 1.0f;
+            projected.p[0].x *= 0.5f * (float)x_max;
+            projected.p[0].y *= 0.5f * (float)y_max;
+            projected.p[1].x *= 0.5f * (float)x_max;
+            projected.p[1].y *= 0.5f * (float)y_max;
+            projected.p[2].x *= 0.5f * (float)x_max;
+            projected.p[2].y *= 0.5f * (float)y_max;
+
+            // TODO can we supply the naked short, or do we need to
+            // use the COLOR_PAIR macro?
+            color_set((short)(1.0f + (light_dp * (float)shades)), NULL);
+            fill_tri(&projected, ACS_BLOCK);
+            // draw_tri(&projected, ' ');
+        }
+
+        // Reset to prepare for overlays and the next frame.
         color_set(default_pair, NULL);
         //attr_set(A_NORMAL, default_pair, NULL);
 

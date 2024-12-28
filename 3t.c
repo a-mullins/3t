@@ -152,9 +152,9 @@ fill_tri(const tri *t, const cchar_t *wch)
     int y2 = (int)t->p[1].y;
     int y3 = (int)t->p[2].y;
 
-    int z1 = (int)t->p[0].z;
-    int z2 = (int)t->p[1].z;
-    int z3 = (int)t->p[2].z;
+    // int z1 = (int)t->p[0].z;
+    // int z2 = (int)t->p[1].z;
+    // int z3 = (int)t->p[2].z;
 
     int t1x, t2x, y, minx, maxx, t1xp, t2xp;
     bool changed1 = false;
@@ -219,8 +219,8 @@ fill_tri(const tri *t, const cchar_t *wch)
 	    else              t2x += signx2;
 	}
     next2:
-	if (minx>t1x) minx = t1x; if (minx>t2x) minx = t2x;
-	if (maxx<t1x) maxx = t1x; if (maxx<t2x) maxx = t2x;
+	if (minx>t1x) {minx = t1x;} if (minx>t2x) {minx = t2x;}
+	if (maxx<t1x) {maxx = t1x;} if (maxx<t2x) {maxx = t2x;}
         //drawline(minx, maxx, y);    // Draw line from min to max points found on the y
         for(int i = minx; i <= maxx; i++) {
             mvadd_wch(y, i, wch);
@@ -279,8 +279,8 @@ fill_tri(const tri *t, const cchar_t *wch)
 	}
     next4:
 
-	if (minx>t1x) minx = t1x; if (minx>t2x) minx = t2x;
-	if (maxx<t1x) maxx = t1x; if (maxx<t2x) maxx = t2x;
+	if (minx>t1x) {minx = t1x;} if (minx>t2x) {minx = t2x;}
+	if (maxx<t1x) {maxx = t1x;} if (maxx<t2x) {maxx = t2x;}
 	//drawline(minx, maxx, y);
         for(int i = minx; i <= maxx; i++) {
             mvadd_wch(y, i, wch);
@@ -312,14 +312,13 @@ mul_mat_vec(const mat4x4 *m, const vec3 *i, vec3 *o) {
 }
 
 bool load_mesh(const char *path, mesh *m) {
+    // TODO verify that m->buf in NULL?
     FILE *fp = fopen(path, "r");
     if(fp == NULL) {fprintf(stderr, "couldn't open %s", path); return false;}
 
     size_t vec_cap = 16;
     size_t vec_len = 0;
     vec3 *vecs = calloc(vec_cap, sizeof (vec3));
-
-    if(m->tris != NULL ) {fprintf(stderr, "passed non-empty mesh"); return false;}
 
     char line[80];
 
@@ -329,7 +328,7 @@ bool load_mesh(const char *path, mesh *m) {
         if(line[0] != 'v') { continue; }
 
         // TODO error handling
-        int n = sscanf(line, "v %f %f %f", &v.x, &v.y, &v.z);
+        sscanf(line, "v %f %f %f", &v.x, &v.y, &v.z);
 
         if(vec_len + 1 >= vec_cap) {
             vec_cap <<= 1;
@@ -354,7 +353,7 @@ bool load_mesh(const char *path, mesh *m) {
         if(line[0] != 'f') { continue; }
 
         // TODO error handling
-        int n = sscanf(line, "f %d %d %d", &i_x, &i_y, &i_z);
+        sscanf(line, "f %d %d %d", &i_x, &i_y, &i_z);
         t.p[0] = *(vecs + i_x - 1);
         t.p[1] = *(vecs + i_y - 1);
         t.p[2] = *(vecs + i_z - 1);
@@ -369,7 +368,7 @@ bool load_mesh(const char *path, mesh *m) {
         tri_len++;
     }
 
-    m->len = tri_len;
+    m->len = (int)tri_len;
     m->tris = calloc(tri_len, sizeof (tri));
     memcpy(m->tris, tris, tri_len * sizeof (tri));
 
@@ -417,18 +416,17 @@ main()
     // TODO: Clean up colors.
     short default_pair = 0;
     init_pair(default_pair, -1, -1);
-    size_t shades = 128;
-    for(short i = 0; i <= shades && i < COLOR_PAIRS-1; i++) {
-        init_color(i + 8,
+    int shades = 128;
+    for(int i = 0; i <= shades && i < COLOR_PAIRS-1; i++) {
+        init_color((short)(i + 8),
                    (short)((float)i * (1000.0f / (float)shades)),
                    (short)((float)i * (1000.0f / (float)shades)),
                    (short)((float)i * (1000.0f / (float)shades)));
-        init_pair((short)i+1, i+8, -1);
+        init_pair((short)(i+1), (short)(i+8), -1);
     }
 
     int y_max, x_max;
     getmaxyx(stdscr, y_max, x_max);
-    char spinner[] = "__--==^^^^==--__";
     unsigned long long frame_cnt = 0;
     //float target_fps = 15;
     darray tris_to_draw;
@@ -496,7 +494,7 @@ main()
         // Collect only the triangles we want to draw.
         darray_clear(&tris_to_draw);
 
-        for(size_t i = 0; i < ms[ms_i].len; i++) {
+        for(int i = 0; i < ms[ms_i].len; i++) {
             // we must use seperate vars for each input and output,
             // because mul_mat_vec assumes the input vector doesn't
             // change.

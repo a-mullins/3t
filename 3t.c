@@ -43,8 +43,6 @@ typedef struct mat4x4 {
 
 
 // -=[ VECTOR AND MATRIX OPERATIONS ]=-----------------------------------------
-// adapted from:
-//   https://github.com/OneLoneCoder/Javidx9/tree/master/ConsoleGameEngine
 void
 mul_mat_vec(const mat4x4 *m, const vec3 *i, vec3 *o)
 {
@@ -135,9 +133,6 @@ normal_tri(const tri *t, vec3 *normal) {
     normal->z = line0.x * line1.y - line0.y * line1.x;
 
     // Normalize the normal vector. :-)
-    // float l = sqrtf(powf(normal->x, 2)
-    //                 + powf(normal->y, 2)
-    //                 + powf(normal->z, 2));
     float l = sqrtf(normal->x*normal->x
                     + normal->y*normal->y
                     + normal->z*normal->z);
@@ -150,8 +145,6 @@ normal_tri(const tri *t, vec3 *normal) {
 // -=[ DRAWING FUNCTIONS ]=----------------------------------------------------
 // adapted from:
 //   https://github.com/OneLoneCoder/Javidx9/tree/master/ConsoleGameEngine
-// TODO figure out how this works or write own,
-//      refactor args to be 0 indexed.
 void
 draw_line(int x1, int y1, int x2, int y2, const cchar_t *wch)
 {
@@ -159,7 +152,7 @@ draw_line(int x1, int y1, int x2, int y2, const cchar_t *wch)
 
     dx = x2 - x1; dy = y2 - y1;
     dx1 = abs(dx); dy1 = abs(dy);
-    px = 2 * dy1 - dx1;    py = 2 * dx1 - dy1;
+    px = 2 * dy1 - dx1; py = 2 * dx1 - dy1;
 
     if (dy1 <= dx1) {
         if (dx >= 0) {
@@ -170,7 +163,6 @@ draw_line(int x1, int y1, int x2, int y2, const cchar_t *wch)
         }
 
         mvadd_wch(y, x, wch);
-        //Draw(x, y, c, col);
 
         for (i = 0; x<xe; i++) {
             x = x + 1;
@@ -178,11 +170,14 @@ draw_line(int x1, int y1, int x2, int y2, const cchar_t *wch)
                 px = px + 2 * dy1;
             }
             else {
-                if ((dx<0 && dy<0) || (dx>0 && dy>0)) y = y + 1; else y = y - 1;
+                if ((dx<0 && dy<0) || (dx>0 && dy>0)) {
+                    y = y + 1;
+                } else {
+                    y = y - 1;
+                }
                 px = px + 2 * (dy1 - dx1);
             }
             mvadd_wch(y, x, wch);
-            // Draw(x, y, c, col);
         }
     }
     else {
@@ -194,7 +189,6 @@ draw_line(int x1, int y1, int x2, int y2, const cchar_t *wch)
         }
 
         mvadd_wch(y, x, wch);
-        // Draw(x, y, c, col);
 
         for (i = 0; y<ye; i++) {
             y = y + 1;
@@ -202,11 +196,14 @@ draw_line(int x1, int y1, int x2, int y2, const cchar_t *wch)
                 py = py + 2 * dx1;
             }
             else {
-                if ((dx<0 && dy<0) || (dx>0 && dy>0)) x = x + 1; else x = x - 1;
+                if ((dx<0 && dy<0) || (dx>0 && dy>0)) {
+                    x = x + 1;
+                } else {
+                    x = x - 1;
+                }
                 py = py + 2 * (dx1 - dy1);
             }
             mvadd_wch(y, x, wch);
-            // Draw(x, y, c, col);
         }
     }
 }
@@ -224,7 +221,7 @@ draw_tri(const tri *t, const cchar_t *wch)
 //   https://github.com/OneLoneCoder/Javidx9/tree/master/ConsoleGameEngine
 // which was adapted from:
 //   https://www.avrfreaks.net/sites/default/files/triangles.c
-// TODO figure out how this works or write own. :)
+//   (dead link)
 void
 fill_tri(const tri *t, const cchar_t *wch)
 {
@@ -236,10 +233,6 @@ fill_tri(const tri *t, const cchar_t *wch)
     int y2 = (int)t->p[1].y;
     int y3 = (int)t->p[2].y;
 
-    // int z1 = (int)t->p[0].z;
-    // int z2 = (int)t->p[1].z;
-    // int z3 = (int)t->p[2].z;
-
     int t1x, t2x, y, minx, maxx, t1xp, t2xp;
     bool changed1 = false;
     bool changed2 = false;
@@ -250,13 +243,22 @@ fill_tri(const tri *t, const cchar_t *wch)
     if (y1>y3) { SWAP(y1, y3); SWAP(x1, x3); }
     if (y2>y3) { SWAP(y2, y3); SWAP(x2, x3); }
 
-    t1x = t2x = x1; y = y1;   // Starting points
-    dx1 = (int)(x2 - x1); if (dx1<0) { dx1 = -dx1; signx1 = -1; }
-    else signx1 = 1;
+    // Starting points
+    t1x = t2x = x1; y = y1;
+    dx1 = (int)(x2 - x1);
+    if (dx1<0) {
+        dx1 = -dx1; signx1 = -1;
+    } else {
+        signx1 = 1;
+    }
     dy1 = (int)(y2 - y1);
 
-    dx2 = (int)(x3 - x1); if (dx2<0) { dx2 = -dx2; signx2 = -1; }
-    else signx2 = 1;
+    dx2 = (int)(x3 - x1);
+    if (dx2<0) {
+        dx2 = -dx2; signx2 = -1;
+    } else {
+        signx2 = 1;
+    }
     dy2 = (int)(y3 - y1);
 
     if (dy1 > dx1) {   // swap values
@@ -270,7 +272,7 @@ fill_tri(const tri *t, const cchar_t *wch)
 
     e2 = (int)(dx2 >> 1);
     // Flat top, just process the second half
-    if (y1 == y2) goto next;
+    if (y1 == y2) { goto next; }
     e1 = (int)(dx1 >> 1);
 
     for (int i = 0; i < dx1;) {
@@ -283,10 +285,10 @@ fill_tri(const tri *t, const cchar_t *wch)
 	    e1 += dy1;
 	    while (e1 >= dx1) {
 		e1 -= dx1;
-		if (changed1) t1xp = signx1;//t1x += signx1;
-		else          goto next1;
+		if (changed1) { t1xp = signx1; }
+                else          { goto next1; }
 	    }
-	    if (changed1) break;
+	    if (changed1) { break; }
 	    else t1x += signx1;
 	}
 	// Move line
@@ -296,32 +298,33 @@ fill_tri(const tri *t, const cchar_t *wch)
 	    e2 += dy2;
 	    while (e2 >= dx2) {
 		e2 -= dx2;
-		if (changed2) t2xp = signx2;//t2x += signx2;
-		else          goto next2;
+		if (changed2) { t2xp = signx2; }
+		else          { goto next2; }
 	    }
-	    if (changed2)     break;
-	    else              t2x += signx2;
+	    if (changed2)     { break; }
+	    else              { t2x += signx2; }
 	}
     next2:
-	if (minx>t1x) {minx = t1x;} if (minx>t2x) {minx = t2x;}
-	if (maxx<t1x) {maxx = t1x;} if (maxx<t2x) {maxx = t2x;}
+	if (minx>t1x) { minx = t1x; } if (minx>t2x) { minx = t2x; }
+	if (maxx<t1x) { maxx = t1x; } if (maxx<t2x) { maxx = t2x; }
         //drawline(minx, maxx, y);    // Draw line from min to max points found on the y
         for(int i = minx; i <= maxx; i++) {
             mvadd_wch(y, i, wch);
         }
 	// Now increase y
-	if (!changed1) t1x += signx1;
+	if (!changed1) { t1x += signx1; }
 	t1x += t1xp;
-	if (!changed2) t2x += signx2;
+	if (!changed2) { t2x += signx2; }
 	t2x += t2xp;
 	y += 1;
-	if (y == y2) break;
+	if (y == y2) { break; }
 
     }
  next:
     // Second half
-    dx1 = (int)(x3 - x2); if (dx1<0) { dx1 = -dx1; signx1 = -1; }
-    else signx1 = 1;
+    dx1 = (int)(x3 - x2);
+    if (dx1<0) { dx1 = -dx1; signx1 = -1; }
+    else       { signx1 = 1; }
     dy1 = (int)(y3 - y2);
     t1x = x2;
 
@@ -336,7 +339,7 @@ fill_tri(const tri *t, const cchar_t *wch)
     for (int i = 0; i <= dx1; i++) {
 	t1xp = 0; t2xp = 0;
 	if (t1x<t2x) { minx = t1x; maxx = t2x; }
-	else { minx = t2x; maxx = t1x; }
+	else         { minx = t2x; maxx = t1x; }
 	// process first line until y value is about to change
 	while (i<dx1) {
 	    e1 += dy1;
@@ -345,9 +348,9 @@ fill_tri(const tri *t, const cchar_t *wch)
 		if (changed1) { t1xp = signx1; break; }//t1x += signx1;
 		else          goto next3;
 	    }
-	    if (changed1) break;
-	    else   	   	  t1x += signx1;
-	    if (i<dx1) i++;
+	    if (changed1) { break; }
+	    else   	  { t1x += signx1; }
+	    if (i<dx1)    { i++; }
 	}
     next3:
 	// process second line until y value is about to change
@@ -355,26 +358,27 @@ fill_tri(const tri *t, const cchar_t *wch)
 	    e2 += dy2;
 	    while (e2 >= dx2) {
 		e2 -= dx2;
-		if (changed2) t2xp = signx2;
-		else          goto next4;
+		if (changed2) { t2xp = signx2; }
+		else          { goto next4; }
 	    }
-	    if (changed2)     break;
-	    else              t2x += signx2;
+	    if (changed2)     { break; }
+	    else              { t2x += signx2; }
 	}
     next4:
 
-	if (minx>t1x) {minx = t1x;} if (minx>t2x) {minx = t2x;}
-	if (maxx<t1x) {maxx = t1x;} if (maxx<t2x) {maxx = t2x;}
-	//drawline(minx, maxx, y);
+	if (minx>t1x) {minx = t1x;}
+        if (minx>t2x) {minx = t2x;}
+	if (maxx<t1x) {maxx = t1x;}
+        if (maxx<t2x) {maxx = t2x;}
         for(int i = minx; i <= maxx; i++) {
             mvadd_wch(y, i, wch);
         }
-	if (!changed1) t1x += signx1;
+	if (!changed1) { t1x += signx1; }
 	t1x += t1xp;
-	if (!changed2) t2x += signx2;
+	if (!changed2) { t2x += signx2; }
 	t2x += t2xp;
 	y += 1;
-	if (y>y3) return;
+	if (y>y3) { return; }
     }
 }
 
@@ -404,7 +408,6 @@ ncurses_startup()
 
 
 bool load_mesh(const char *path, mesh *m) {
-    // TODO verify that m->buf in NULL?
     FILE *fp = fopen(path, "r");
     if(fp == NULL) {fprintf(stderr, "couldn't open %s", path); return false;}
 
@@ -419,12 +422,10 @@ bool load_mesh(const char *path, mesh *m) {
     while(fgets(line, 80, fp) != NULL) {
         if(line[0] != 'v') { continue; }
 
-        // TODO error handling
         sscanf(line, "v %f %f %f", &v.x, &v.y, &v.z);
 
         if(vec_len + 1 >= vec_cap) {
             vec_cap <<= 1;
-            // TODO error handling
             vecs = realloc(vecs, vec_cap * sizeof (vec3));
         }
 
@@ -444,7 +445,6 @@ bool load_mesh(const char *path, mesh *m) {
     while(fgets(line, 80, fp) != NULL) {
         if(line[0] != 'f') { continue; }
 
-        // TODO error handling
         sscanf(line, "f %d %d %d", &i_x, &i_y, &i_z);
         t.p[0] = *(vecs + i_x - 1);
         t.p[1] = *(vecs + i_y - 1);
@@ -452,7 +452,6 @@ bool load_mesh(const char *path, mesh *m) {
 
         if(tri_len + 1 >= tri_cap) {
             tri_cap <<= 1;
-            // TODO error handling
             tris = realloc(tris, tri_cap * sizeof (tri));
         }
 
@@ -511,7 +510,6 @@ main()
     vec3 camera = {0};
 
     // Colors
-    // TODO: Clean up colors.
     short default_pair = 0;
     init_pair(default_pair, -1, -1);
     int shades = 128;
@@ -537,10 +535,7 @@ main()
     // MAIN LOOP
     while( 1 ) {
         getmaxyx(stdscr, y_max, x_max);
-        //move(0, 0);
-        //erase();
 
-        // TODO handle the wint_t better (maybe use wctobs?)
         wint_t key_pressed = 0;
         while(get_wch(&key_pressed) != ERR) {
             switch(key_pressed) {
@@ -712,8 +707,6 @@ main()
 
         frame_cnt++;
         refresh();
-        // TODO a better thing to do would be to calculate delta
-        //      between frames and then sleep an appropriate amount.
         // Sleep for 1/30th of a second.
         usleep(33330);
     }

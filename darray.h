@@ -1,3 +1,4 @@
+#pragma once
 #define MIN_CAP 16
 
 typedef struct darray {

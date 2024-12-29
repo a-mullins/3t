@@ -19,3 +19,6 @@ darray_push(darray *d, void *elem);
 
 void
 darray_clear(darray *d);
+
+void
+darray_free(darray *d);

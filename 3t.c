@@ -712,6 +712,7 @@ main()
     }
 
 cleanup:
+    darray_free(&tris_to_draw);
     for(int i = 0; i < ms_len; i++) {
         free(ms[i].tris);
     }

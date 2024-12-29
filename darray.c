@@ -48,4 +48,5 @@ darray_free(darray *d) {
     d->len = 0;
     d->elem_size = 0;
     free(d->buf);
+    d->buf = NULL;
 }

@@ -1,4 +1,4 @@
-# 3t: 3d in the terminal
+# 3t is 3d in the terminal
 3t is a toy program that renders OBJs in the terminal on Linux and macOS. It
 was heavily inspired by
 [javidx9's YouTube](https://www.youtube.com/watch?v=ih20l3pJoeU) series on

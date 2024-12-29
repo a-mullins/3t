@@ -1,9 +1,9 @@
-// NB: I have conciously chosen to do precious little error handling
-// in this program. It is primarily educational. If you choose to use
-// portions of this code, do so with that in mind.
+// Nota bene: I have chosen to do little error handling in this
+// program. It is primarily educational. If you choose to use portions
+// of this code, do so with that in mind.
 
 // This is necessary to enable ncurses wide character support,
-// at least with how it is packaged in Arch.
+// at least with how it is packaged on Arch.
 #define _XOPEN_SOURCE_EXTENDED
 
 #include <locale.h>
@@ -17,15 +17,13 @@
 #include <wchar.h>   // for wint_t, wchar_t, etc.
 #include "darray.h"
 
-#define LEN(XS) (sizeof (XS) / sizeof (XS[0]))
-
+#define LEN(X) sizeof (X) / sizeof (X[0]);
 #define SWAP(M, N) { M ^= N; \
                      N ^= M; \
                      M ^= N; }
 
-// Nope. It doesn't work. :D
-// #define SWAP(M, N) asm ("xchg %0, %1;" : : "r" (M), "r" (N));
 
+// -=[ STRUCTS / TYPES ]=------------------------------------------------------
 typedef struct vec3 {
     float x, y, z;
 } vec3;
@@ -43,28 +41,113 @@ typedef struct mat4x4 {
     float m[4][4];
 } mat4x4;
 
+
+// -=[ VECTOR AND MATRIX OPERATIONS ]=-----------------------------------------
+// adapted from:
+//   https://github.com/OneLoneCoder/Javidx9/tree/master/ConsoleGameEngine
 void
-ncurses_startup()
+mul_mat_vec(const mat4x4 *m, const vec3 *i, vec3 *o)
 {
-    // per the advice of `man ncurses`
-    setlocale(LC_ALL, "");
+    float w;
+    o->x = i->x * m->m[0][0] + i->y * m->m[1][0] + i->z * m->m[2][0] + m->m[3][0];
+    o->y = i->x * m->m[0][1] + i->y * m->m[1][1] + i->z * m->m[2][1] + m->m[3][1];
+    o->z = i->x * m->m[0][2] + i->y * m->m[1][2] + i->z * m->m[2][2] + m->m[3][2];
+       w = i->x * m->m[0][3] + i->y * m->m[1][3] + i->z * m->m[2][3] + m->m[3][3];
 
-    // init ncuruses
-    initscr();
-
-    // ncurses options
-    cbreak();
-    noecho();
-    nodelay(stdscr, TRUE);
-    curs_set(0);
-    scrollok(stdscr, FALSE);
-    keypad(stdscr, TRUE);
-
-    // color
-    start_color();
-    use_default_colors();
+    if (w != 0.0f) {
+	o->x /= w;
+        o->y /= w;
+        o->z /= w;
+    }
 }
 
+
+// Multiply each vector of triangle `t` with matrix `m`.
+// This is useful for applying a transform to a triangle.
+void
+mul_mat_tri(const mat4x4 *m, const tri *t, tri *to)
+{
+    for(short i = 0; i < 3; i++) {
+        mul_mat_vec(m, &t->p[i], &to->p[i]);
+    }
+}
+
+
+// using out param instead of returning to match mul_mat_vec, etc
+void
+add_vec(const vec3 *v1, const vec3 *v2, vec3 *vo)
+{
+    vo->x = v1->x + v2->x;
+    vo->y = v1->y + v2->y;
+    vo->z = v1->z + v2->z;
+}
+
+
+void
+sub_vec(const vec3 *v1, const vec3 *v2, vec3 *vo)
+{
+    vo->x = v1->x - v2->x;
+    vo->y = v1->y - v2->y;
+    vo->z = v1->z - v2->z;
+}
+
+
+void
+mul_scalar_vec(float f, const vec3 *v, vec3 *vo)
+{
+    vo->x = v->x * f;
+    vo->y = v->y * f;
+    vo->z = v->z * f;
+}
+
+
+void
+div_scalar_vec(float f, const vec3 *v, vec3 *vo)
+{
+    vo->x = v->x / f;
+    vo->y = v->y / f;
+    vo->z = v->z / f;
+}
+
+
+// Add vector `v` to every vector in triangle `t`.
+void
+add_tri_vec(const tri *t, const vec3 *v, tri *to)
+{
+    for(short i=0; i<3; i++) {
+        to->p[i].x = t->p[i].x + v->x;
+        to->p[i].y = t->p[i].y + v->y;
+        to->p[i].z = t->p[i].z + v->z;
+    }
+}
+
+
+// Calculate the face normal for triange `t`.
+void
+normal_tri(const tri *t, vec3 *normal) {
+    // Find triangle normal.
+    vec3 line0, line1;
+    sub_vec(&t->p[1], &t->p[0], &line0);
+    sub_vec(&t->p[2], &t->p[0], &line1);
+
+    normal->x = line0.y * line1.z - line0.z * line1.y;
+    normal->y = line0.z * line1.x - line0.x * line1.z;
+    normal->z = line0.x * line1.y - line0.y * line1.x;
+
+    // Normalize the normal vector. :-)
+    // float l = sqrtf(powf(normal->x, 2)
+    //                 + powf(normal->y, 2)
+    //                 + powf(normal->z, 2));
+    float l = sqrtf(normal->x*normal->x
+                    + normal->y*normal->y
+                    + normal->z*normal->z);
+    normal->x /= l;
+    normal->y /= l;
+    normal->z /= l;
+}
+
+
+// -=[ DRAWING FUNCTIONS ]=----------------------------------------------------
 // adapted from:
 //   https://github.com/OneLoneCoder/Javidx9/tree/master/ConsoleGameEngine
 // TODO figure out how this works or write own,
@@ -127,6 +210,7 @@ draw_line(int x1, int y1, int x2, int y2, const cchar_t *wch)
         }
     }
 }
+
 
 void
 draw_tri(const tri *t, const cchar_t *wch)
@@ -294,22 +378,30 @@ fill_tri(const tri *t, const cchar_t *wch)
     }
 }
 
-// adapted from:
-//   https://github.com/OneLoneCoder/Javidx9/tree/master/ConsoleGameEngine
-void
-mul_mat_vec(const mat4x4 *m, const vec3 *i, vec3 *o) {
-    float w;
-    o->x = i->x * m->m[0][0] + i->y * m->m[1][0] + i->z * m->m[2][0] + m->m[3][0];
-    o->y = i->x * m->m[0][1] + i->y * m->m[1][1] + i->z * m->m[2][1] + m->m[3][1];
-    o->z = i->x * m->m[0][2] + i->y * m->m[1][2] + i->z * m->m[2][2] + m->m[3][2];
-       w = i->x * m->m[0][3] + i->y * m->m[1][3] + i->z * m->m[2][3] + m->m[3][3];
 
-    if (w != 0.0f) {
-	o->x /= w;
-        o->y /= w;
-        o->z /= w;
-    }
+// -=[ UTILITY FUNCTIONS ]=----------------------------------------------------
+void
+ncurses_startup()
+{
+    // per the advice of `man ncurses`
+    setlocale(LC_ALL, "");
+
+    // init ncuruses
+    initscr();
+
+    // ncurses options
+    cbreak();
+    noecho();
+    nodelay(stdscr, TRUE);
+    curs_set(0);
+    scrollok(stdscr, FALSE);
+    keypad(stdscr, TRUE);
+
+    // color
+    start_color();
+    use_default_colors();
 }
+
 
 bool load_mesh(const char *path, mesh *m) {
     // TODO verify that m->buf in NULL?
@@ -376,7 +468,7 @@ bool load_mesh(const char *path, mesh *m) {
 }
 
 int
-z_sort(const void *a, const void *b)
+z_cmp(const void *a, const void *b)
 {
     tri t1 = *(tri *)a;
     tri t2 = *(tri *)b;
@@ -389,16 +481,22 @@ z_sort(const void *a, const void *b)
     return 0;
 }
 
+
+// -=[ MAIN ]=-----------------------------------------------------------------
 int
 main()
 {
-    int ms_len = 3;
+    // Mesh files to load.
+    wchar_t *ms_str[] = {L"snowflake.obj", L"cube.obj"};
+    int ms_len = LEN(ms_str);
     int ms_i = 0;
-    mesh ms[3] = { 0 };
-    wchar_t *ms_str[3] = {L"snowflake.obj", L"cube.obj", L"faux-wing.obj"};
-    load_mesh("/home/alm/Code/3t/snowflake.obj", &ms[0]);
-    load_mesh("/home/alm/Code/3t/cube.obj", &ms[1]);
-    load_mesh("/home/alm/Code/3t/ship.obj", &ms[2]);
+    // Yes this is a VLA. I try to avoid them but...
+    mesh ms[ms_len];
+    for(int i = 0; i<ms_len; i++) {
+        char s[32];
+        wcstombs(s, ms_str[i], 32);
+        load_mesh(s, &ms[i]);
+    }
 
     ncurses_startup();
 
@@ -498,63 +596,31 @@ main()
             // we must use seperate vars for each input and output,
             // because mul_mat_vec assumes the input vector doesn't
             // change.
-            tri t, translated, rotated_z, rotated_zx;
+            tri t;
             t = *(ms[ms_i].tris + i);
 
             // Rotate around z axis.
-            mul_mat_vec(&rot_z, &t.p[0], &rotated_z.p[0]);
-            mul_mat_vec(&rot_z, &t.p[1], &rotated_z.p[1]);
-            mul_mat_vec(&rot_z, &t.p[2], &rotated_z.p[2]);
+            tri rotated_z;
+            mul_mat_tri(&rot_z, &t, &rotated_z);
 
             // Rotate around x axis.
-            mul_mat_vec(&rot_x, &rotated_z.p[0], &rotated_zx.p[0]);
-            mul_mat_vec(&rot_x, &rotated_z.p[1], &rotated_zx.p[1]);
-            mul_mat_vec(&rot_x, &rotated_z.p[2], &rotated_zx.p[2]);
+            tri rotated_zx;
+            mul_mat_tri(&rot_x, &rotated_z, &rotated_zx);
 
-            // Translate forward, away from camera.
-            translated = rotated_zx;
-            if(ms_i == 0) {
-                translated.p[0].z += 2.0f;
-                translated.p[1].z += 2.0f;
-                translated.p[2].z += 2.0f;
-            }
-            if(ms_i == 1) {
-                translated.p[0].z += 1.0f;
-                translated.p[1].z += 1.0f;
-                translated.p[2].z += 1.0f;
-            }
-            if(ms_i == 2) {
-                translated.p[0].z += 6.0f;
-                translated.p[1].z += 6.0f;
-                translated.p[2].z += 6.0f;
-            }
+            // Translate away from camera.
+            tri translated;
+            add_tri_vec(&rotated_zx,
+                        &(vec3){.x = 0, .y = 0, .z = 2.0f},
+                        &translated);
 
             // Find triangle normal.
-            vec3 normal, line0, line1;
-            line0.x = translated.p[1].x - translated.p[0].x;
-            line0.y = translated.p[1].y - translated.p[0].y;
-            line0.z = translated.p[1].z - translated.p[0].z;
-
-            line1.x = translated.p[2].x - translated.p[0].x;
-            line1.y = translated.p[2].y - translated.p[0].y;
-            line1.z = translated.p[2].z - translated.p[0].z;
-
-            // Cross product, to find normal.
-            normal.x = line0.y * line1.z - line0.z * line1.y;
-            normal.y = line0.z * line1.x - line0.x * line1.z;
-            normal.z = line0.x * line1.y - line0.y * line1.x;
-
-            // Normalize the normal vector. :-)
-            float l = sqrtf(powf(normal.x, 2) + powf(normal.y, 2)
-                            + powf(normal.z, 2));
-            normal.x /= l;
-            normal.y /= l;
-            normal.z /= l;
+            vec3 normal;
+            normal_tri(&translated, &normal);
 
             // Should this face be drawn?
-            float D = normal.x*(translated.p[0].x - camera.x)
-                + normal.y*(translated.p[0].y - camera.y)
-                + normal.z*(translated.p[0].z - camera.z);
+            float D = normal.x * (translated.p[0].x - camera.x)
+                + normal.y * (translated.p[0].y - camera.y)
+                + normal.z * (translated.p[0].z - camera.z);
 
             if(D < 0.0f) {
                 darray_push(&tris_to_draw, &translated);
@@ -562,11 +628,11 @@ main()
         }
 
         // Sort triangles by z-depth, so that ones farther away can be
-        // drawn before closer ones. This is the painter's algorithm.
+        // drawn before closer ones.
         qsort(tris_to_draw.buf,
               tris_to_draw.len,
               tris_to_draw.elem_size,
-              z_sort);
+              z_cmp);
 
         // Clear screen before we draw.
         erase();
@@ -574,36 +640,15 @@ main()
         // Draw the triangles.
         for(size_t i = 0; i < tris_to_draw.len; i++) {
             tri t = *(tri *)darray_get(&tris_to_draw, i);
+            vec3 normal;
+            normal_tri(&t, &normal);
 
-            // find tri normal
-            vec3 normal, line0, line1;
-            line0.x = t.p[1].x - t.p[0].x;
-            line0.y = t.p[1].y - t.p[0].y;
-            line0.z = t.p[1].z - t.p[0].z;
-
-            line1.x = t.p[2].x - t.p[0].x;
-            line1.y = t.p[2].y - t.p[0].y;
-            line1.z = t.p[2].z - t.p[0].z;
-
-            // Cross product, to find normal.
-            normal.x = line0.y * line1.z - line0.z * line1.y;
-            normal.y = line0.z * line1.x - line0.x * line1.z;
-            normal.z = line0.x * line1.y - line0.y * line1.x;
-
-            // Normalize the normal vector. :-)
-            float l = sqrtf(powf(normal.x, 2)
-                            + powf(normal.y, 2)
-                            + powf(normal.z, 2));
-            normal.x /= l;
-            normal.y /= l;
-            normal.z /= l;
-
-            // global illumination
+            // Light tris by global illumination.
             vec3 light = { 0.0f, 0.0f, -1.0f };
             // normalize light vec
-            l = sqrtf(powf(light.x, 2)
-                      + powf(light.y, 2)
-                      + powf(light.z, 2));
+            float l = sqrtf(light.x * light.x
+                      + light.y * light.y
+                      + light.z * light.z);
             light.x /= l; light.y /= l; light.z /= l;
             float light_dp = light.x * normal.x
                 + light.y * normal.y
@@ -612,9 +657,7 @@ main()
             tri projected = {0};
             // Apply perspective transform to each point,
             // that is, project triangle from 3d into 2d.
-            mul_mat_vec(&mat_proj, &t.p[0], &projected.p[0]);
-            mul_mat_vec(&mat_proj, &t.p[1], &projected.p[1]);
-            mul_mat_vec(&mat_proj, &t.p[2], &projected.p[2]);
+            mul_mat_tri(&mat_proj, &t, &projected);
 
             // Each point has a range of -1 to +1, so it must be
             // scaled into screen space.
@@ -622,6 +665,8 @@ main()
             projected.p[1].x += 1.0f; projected.p[1].y += 1.0f;
             projected.p[2].x += 1.0f; projected.p[2].y += 1.0f;
 
+            // This could be collapsed by using a 3x1 transform
+            // and scalar multiply.
             projected.p[0].x *= 0.5f * (float)x_max;
             projected.p[0].y *= 0.5f * (float)y_max;
             projected.p[1].x *= 0.5f * (float)x_max;
@@ -629,11 +674,7 @@ main()
             projected.p[2].x *= 0.5f * (float)x_max;
             projected.p[2].y *= 0.5f * (float)y_max;
 
-            // TODO can we supply the naked short, or do we need to
-            // use the COLOR_PAIR macro?
-            //color_set((short)(1.0f + (light_dp * (float)shades)), NULL);
             short color_pair = (short)(1.0f + (light_dp * (float)shades));
-
             cchar_t wch_full;
             wchar_t wc_full[] = L"\u2588";
             setcchar(&wch_full, wc_full, A_NORMAL, color_pair, NULL);
@@ -642,6 +683,7 @@ main()
             wchar_t wc_blank[] = L" ";
             setcchar(&wch_blank, wc_blank, A_NORMAL, color_pair, NULL);
 
+            // Finally, we get to draw 'pixels' to our screen.
             if(mode == SHADED) {
                 fill_tri(&projected, &wch_full);
             } else if (mode == OUTLINED) {
@@ -668,19 +710,18 @@ main()
         swprintf(ws_buf, 80, L"\u03B8: %f\u03c0", (float)theta / M_PI);
         mvaddwstr(4, 10, ws_buf);
 
-        // mvprintw(6, 12, "theta: %04.2f", (float)theta / M_PI);
-
         frame_cnt++;
         refresh();
         // TODO a better thing to do would be to calculate delta
         //      between frames and then sleep an appropriate amount.
-        //usleep(16665);
+        // Sleep for 1/30th of a second.
         usleep(33330);
-        //usleep(66700);
     }
 
 cleanup:
-    // CLEANUP
+    for(int i = 0; i < ms_len; i++) {
+        free(ms[i].tris);
+    }
     endwin();
     return 0;
 }

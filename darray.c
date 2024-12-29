@@ -3,6 +3,9 @@
 #include "darray.h"
 
 
+#define MIN_CAP 16
+
+
 void
 darray_init(darray *d, size_t elem_size)
 {

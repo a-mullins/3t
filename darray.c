@@ -20,7 +20,8 @@ darray_get(darray *d, size_t n)
 }
 
 
-void darray_push(darray *d, void *elem)
+void
+darray_push(darray *d, void *elem)
 {
     if(d->len+1 >= d->cap) {
         d->cap <<= 1;

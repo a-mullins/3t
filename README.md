@@ -9,9 +9,5 @@ brittle and it may not build on yours. I also deliberately chose to
 ignore error handling. So, if you want to build it, or use the code
 for your own purposes, you are on your own. :-)
 
-## Screenshots
-Here is how it renders a 3d snowflake. The program spins the object
-around, which makes the lighting and shading more visible. But I can't
-capture that with a still.
-
+## Screenshot
 ![Snowflake](screenshot0.png?raw=true)

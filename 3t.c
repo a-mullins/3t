@@ -2,10 +2,6 @@
 // program. It is primarily educational. If you choose to use portions
 // of this code, do so with that in mind.
 
-// This is necessary to enable ncurses wide character support,
-// at least with how it is packaged on Arch.
-#define _XOPEN_SOURCE_EXTENDED
-
 #include <locale.h>
 #include <math.h>    // for sinf(), cosf(), tanf(), M_PI
 #include <ncurses.h>
@@ -146,7 +142,7 @@ normal_tri(const tri *t, vec3 *normal) {
 // adapted from:
 //   https://github.com/OneLoneCoder/Javidx9/tree/master/ConsoleGameEngine
 void
-draw_line(int x1, int y1, int x2, int y2, const cchar_t *wch)
+draw_line(int x1, int y1, int x2, int y2, chtype ch)
 {
     int x, y, dx, dy, dx1, dy1, px, py, xe, ye, i;
 
@@ -162,7 +158,7 @@ draw_line(int x1, int y1, int x2, int y2, const cchar_t *wch)
             x = x2; y = y2; xe = x1;
         }
 
-        mvadd_wch(y, x, wch);
+        mvaddch(y, x, ch);
 
         for (i = 0; x<xe; i++) {
             x = x + 1;
@@ -177,7 +173,7 @@ draw_line(int x1, int y1, int x2, int y2, const cchar_t *wch)
                 }
                 px = px + 2 * (dy1 - dx1);
             }
-            mvadd_wch(y, x, wch);
+            mvaddch(y, x, ch);
         }
     }
     else {
@@ -188,7 +184,7 @@ draw_line(int x1, int y1, int x2, int y2, const cchar_t *wch)
             x = x2; y = y2; ye = y1;
         }
 
-        mvadd_wch(y, x, wch);
+        mvaddch(y, x, ch);
 
         for (i = 0; y<ye; i++) {
             y = y + 1;
@@ -203,18 +199,18 @@ draw_line(int x1, int y1, int x2, int y2, const cchar_t *wch)
                 }
                 py = py + 2 * (dx1 - dy1);
             }
-            mvadd_wch(y, x, wch);
+            mvaddch(y, x, ch);
         }
     }
 }
 
 
 void
-draw_tri(const tri *t, const cchar_t *wch)
+draw_tri(const tri *t, chtype ch)
 {
-    draw_line((int)t->p[0].x, (int)t->p[0].y, (int)t->p[1].x, (int)t->p[1].y, wch);
-    draw_line((int)t->p[1].x, (int)t->p[1].y, (int)t->p[2].x, (int)t->p[2].y, wch);
-    draw_line((int)t->p[2].x, (int)t->p[2].y, (int)t->p[0].x, (int)t->p[0].y, wch);
+    draw_line((int)t->p[0].x, (int)t->p[0].y, (int)t->p[1].x, (int)t->p[1].y, ch);
+    draw_line((int)t->p[1].x, (int)t->p[1].y, (int)t->p[2].x, (int)t->p[2].y, ch);
+    draw_line((int)t->p[2].x, (int)t->p[2].y, (int)t->p[0].x, (int)t->p[0].y, ch);
 }
 
 // adapted from:
@@ -223,7 +219,7 @@ draw_tri(const tri *t, const cchar_t *wch)
 //   https://www.avrfreaks.net/sites/default/files/triangles.c
 //   (dead link)
 void
-fill_tri(const tri *t, const cchar_t *wch)
+fill_tri(const tri *t, chtype ch)
 {
     int x1 = (int)t->p[0].x;
     int x2 = (int)t->p[1].x;
@@ -309,7 +305,7 @@ fill_tri(const tri *t, const cchar_t *wch)
 	if (maxx<t1x) { maxx = t1x; } if (maxx<t2x) { maxx = t2x; }
         //drawline(minx, maxx, y);    // Draw line from min to max points found on the y
         for(int i = minx; i <= maxx; i++) {
-            mvadd_wch(y, i, wch);
+            mvaddch(y, i, ch);
         }
 	// Now increase y
 	if (!changed1) { t1x += signx1; }
@@ -371,7 +367,7 @@ fill_tri(const tri *t, const cchar_t *wch)
 	if (maxx<t1x) {maxx = t1x;}
         if (maxx<t2x) {maxx = t2x;}
         for(int i = minx; i <= maxx; i++) {
-            mvadd_wch(y, i, wch);
+            mvaddch(y, i, ch);
         }
 	if (!changed1) { t1x += signx1; }
 	t1x += t1xp;
@@ -486,15 +482,13 @@ int
 main()
 {
     // Mesh files to load.
-    wchar_t *ms_str[] = {L"snowflake.obj", L"cube.obj"};
+    char *ms_str[] = {"snowflake.obj", "cube.obj"};
     int ms_len = LEN(ms_str);
     int ms_i = 0;
     // Yes this is a VLA. I try to avoid them but...
     mesh ms[ms_len];
     for(int i = 0; i<ms_len; i++) {
-        char s[32];
-        wcstombs(s, ms_str[i], 32);
-        load_mesh(s, &ms[i]);
+        load_mesh(ms_str[i], &ms[i]);
     }
 
     ncurses_startup();
@@ -529,15 +523,15 @@ main()
     darray_init(&tris_to_draw, sizeof (tri));
 
     typedef enum render_mode {SHADED, WIREFRAME, OUTLINED, NUM} render_mode;
-    wchar_t *render_mode_str[NUM] = {L"shaded", L"wireframe", L"outlined"};
+    char *render_mode_str[NUM] = {"shaded", "wireframe", "outlined"};
     render_mode mode = SHADED;
 
     // MAIN LOOP
     while( 1 ) {
         getmaxyx(stdscr, y_max, x_max);
 
-        wint_t key_pressed = 0;
-        while(get_wch(&key_pressed) != ERR) {
+        int key_pressed = 0;
+        while((key_pressed = getch()) != ERR) {
             switch(key_pressed) {
             case 'q':
                 goto cleanup;
@@ -669,41 +663,22 @@ main()
             projected.p[2].x *= 0.5f * (float)x_max;
             projected.p[2].y *= 0.5f * (float)y_max;
 
-            short color_pair = (short)(1.0f + (light_dp * (float)shades));
-            cchar_t wch_full;
-            wchar_t wc_full[] = L"\u2588";
-            setcchar(&wch_full, wc_full, A_NORMAL, color_pair, NULL);
-
-            cchar_t wch_blank;
-            wchar_t wc_blank[] = L" ";
-            setcchar(&wch_blank, wc_blank, A_NORMAL, color_pair, NULL);
-
             // Finally, we get to draw 'pixels' to our screen.
             if(mode == SHADED) {
-                fill_tri(&projected, &wch_full);
+                fill_tri(&projected, '#');
             } else if (mode == OUTLINED) {
-                fill_tri(&projected, &wch_full);
-                draw_tri(&projected, &wch_blank);
+                fill_tri(&projected, '#');
+                draw_tri(&projected, ' ');
             } else {
-                draw_tri(&projected, &wch_full);
+                draw_tri(&projected, '#');
             }
         }
 
-        wchar_t ws_buf[80] = { 0 };
-        swprintf(ws_buf, 80, L"mesh: %ls", ms_str[ms_i]);
-        mvaddwstr(0, 7, ws_buf);
-
-        swprintf(ws_buf, 80, L"render mode: %ls", render_mode_str[mode]);
-        mvaddwstr(1, 0, ws_buf);
-
-        swprintf(ws_buf, 80, L"term size: %d col, %d row", x_max, y_max);
-        mvaddwstr(2, 2, ws_buf);
-
-        swprintf(ws_buf, 80, L"frame count: %d", frame_cnt);
-        mvaddwstr(3, 0, ws_buf);
-
-        swprintf(ws_buf, 80, L"\u03B8: %f\u03c0", (float)theta / M_PI);
-        mvaddwstr(4, 10, ws_buf);
+        mvprintw(0, 7, "mesh: %s", ms_str[ms_i]);
+        mvprintw(1, 0, "rendermode: %s", render_mode_str[mode]);
+        mvprintw(2, 2, "term size: %d col, %d row", x_max, y_max);
+        mvprintw(3, 0, "frame count: %lld", frame_cnt);
+        // mvprintw(4, 10, "theta/pi: ", (float)theta / M_PI)
 
         frame_cnt++;
         refresh();

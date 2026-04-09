@@ -504,16 +504,16 @@ main()
     vec3 camera = {0};
 
     // Colors
-    short default_pair = 0;
-    init_pair(default_pair, -1, -1);
-    int shades = 128;
-    for(int i = 0; i <= shades && i < COLOR_PAIRS-1; i++) {
-        init_color((short)(i + 8),
-                   (short)((float)i * (1000.0f / (float)shades)),
-                   (short)((float)i * (1000.0f / (float)shades)),
-                   (short)((float)i * (1000.0f / (float)shades)));
-        init_pair((short)(i+1), (short)(i+8), -1);
-    }
+    // short default_pair = 0;
+    // init_pair(default_pair, -1, -1);
+    // int shades = 128;
+    // for(int i = 0; i <= shades && i < COLOR_PAIRS-1; i++) {
+    //     init_color((short)(i + 8),
+    //                (short)((float)i * (1000.0f / (float)shades)),
+    //                (short)((float)i * (1000.0f / (float)shades)),
+    //                (short)((float)i * (1000.0f / (float)shades)));
+    //     init_pair((short)(i+1), (short)(i+8), -1);
+    // }
 
     int y_max, x_max;
     getmaxyx(stdscr, y_max, x_max);
@@ -664,8 +664,14 @@ main()
             projected.p[2].y *= 0.5f * (float)y_max;
 
             // Finally, we get to draw 'pixels' to our screen.
-            if(mode == SHADED) {
-                fill_tri(&projected, '#');
+            if (mode == SHADED) {
+              if (light_dp >= 0.3) {
+                attr_set(A_DIM, 0, NULL);
+              }
+              if (light_dp >= 0.7) {
+                attr_set(A_BOLD, 0, NULL);
+              }
+              fill_tri(&projected, '#');
             } else if (mode == OUTLINED) {
                 fill_tri(&projected, '#');
                 draw_tri(&projected, ' ');
@@ -673,6 +679,7 @@ main()
                 draw_tri(&projected, '#');
             }
         }
+        attr_set(A_NORMAL, 0, NULL);
 
         mvprintw(0, 7, "mesh: %s", ms_str[ms_i]);
         mvprintw(1, 0, "rendermode: %s", render_mode_str[mode]);

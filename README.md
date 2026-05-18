@@ -1,13 +1,13 @@
 ## 3t is 3d in the terminal
-3t is a toy program that renders OBJs in the terminal on Linux and macOS. It
-was heavily inspired by
-[javidx9's YouTube](https://www.youtube.com/watch?v=ih20l3pJoeU) series on
-building a similar renderer, but for the Windows console.
+3t renders OBJs in the terminal. It was inspired by [javidx9's YouTube](https://www.youtube.com/watch?v=ih20l3pJoeU)
+series on building a similar software renderer.
 
-3t is meant to be educational, so while it works on my machine, it is
-brittle and it may not build on yours. I also deliberately chose to
-ignore error handling. So, if you want to build it, or use the code
-for your own purposes, you are on your own. :-)
+I made 3t to explore the math powering 3d graphics and the basics of software
+rendering.
+
+Currently it is only known to build on Linux, specifically Fedora 42. I
+would like to get it working on macOS, FreeBSD, and OpenBSD later, but it's
+not a priority at the moment.
 
 ## Screenshot
 ![Snowflake](screenshot0.png?raw=true)

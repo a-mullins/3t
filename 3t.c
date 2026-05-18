@@ -1,19 +1,22 @@
-#include <curses.h>
+#define NCURSES_WIDECHAR 1
 #include <locale.h>
-#include <math.h>    // for sinf(), cosf(), tanf(), M_PI
+#include <math.h>    // for sinf(), cosf(), tanf()
+#include <ncurses.h>
 #include <stdbool.h>
 #include <stdio.h>   // fopen, fprintf, etc
 #include <stdlib.h>  // for abs()
 #include <string.h>  // memcpy()
+#include <time.h>
 #include <unistd.h>  // for usleep()
 #include <wchar.h>   // for wint_t, wchar_t, etc.
 #include "darray.h"
 
 
-#define LEN(X) (sizeof (X) / sizeof (X)[0])
+#define LEN(X)     (sizeof (X) / sizeof (X)[0])
 #define SWAP(M, N) { M ^= N; \
                      N ^= M; \
                      M ^= N; }
+#define M_PIf      3.14159265358979323846f
 
 
 // -=[ STRUCTS / TYPES ]=------------------------------------------------------
@@ -48,10 +51,10 @@ void add_tri_vec(const tri *t, const vec3 *v, tri *to);
 void normal_tri(const tri *t, vec3 *normal);
 
 
-// -=[ DRAWING FUNCTIONS ]=----------------------------------------------------
-void draw_line(int x1, int y1, int x2, int y2, chtype ch);
-void draw_tri(const tri *t, chtype ch);
-void fill_tri(const tri *t, chtype ch);
+// -=[ RASTERIZATION FUNCTIONS ]=----------------------------------------------
+void draw_line(int x1, int y1, int x2, int y2, const cchar_t *wch);
+void draw_tri(const tri *t, const cchar_t *wch);
+void fill_tri(const tri *t, const cchar_t *wch);
 
 
 // -=[ UTILITY FUNCTIONS ]=----------------------------------------------------
@@ -126,7 +129,7 @@ main(int argc, char **argv)
                 mode = (mode + 1) % NUM;
                 break;
             case KEY_RIGHT:
-                mesh_i = (++mesh_i) % meshes.len;
+                mesh_i = (mesh_i + 1) % meshes.len;
                 break;
             case KEY_LEFT:
                 mesh_i = mesh_i == 0 ? meshes.len - 1 : mesh_i -1;
@@ -140,7 +143,7 @@ main(int argc, char **argv)
         // The 2x coeff to the aspect ratio is to correct for the fact that
         // characters are not square.
         float aspect = 2 * ((float)y_max / (float)x_max);
-        float fov_rad = 1 / tanf(fov * 0.5f / 180.0f * (float)M_PI);
+        float fov_rad = 1 / tanf(fov * 0.5f / 180.0f * M_PIf);
         mat4x4 mat_proj = { .m = {
                 {aspect * fov_rad, 0.0f,    0.0f,                       0.0f},
                 {0.0f,             fov_rad, 0.0f,                       0.0f},
@@ -148,7 +151,7 @@ main(int argc, char **argv)
                 {0.0f,             0.0f,    (-far*near) / (far - near), 0.0f}
             }};
 
-        float theta = (float)frame_cnt / 15.0f / (float)(0.5f*M_PI);
+        float theta = (float)frame_cnt / 15.0f / (0.5f * M_PIf);
 
         rot_z.m[0][0] = cosf(theta);
         rot_z.m[0][1] = sinf(theta);
@@ -185,7 +188,7 @@ main(int argc, char **argv)
             // Translate away from camera.
             tri translated;
             add_tri_vec(&rotated_zx,
-                        &(vec3){.x = 0, .y = 0, .z = m_p->radius * 1.7},
+                        &(vec3){.x = 0, .y = 0, .z = m_p->radius * 1.7f},
                         &translated);
 
             // Find triangle normal.
@@ -219,7 +222,7 @@ main(int argc, char **argv)
             normal_tri(&t, &normal);
 
             // Light tris by global illumination.
-            vec3 light = { 0.0f, 0.0f, -1.0f };
+            vec3 light = { 0.5f, 0.5f, -1.0f };
             // normalize light vec
             float l = sqrtf(light.x * light.x
                       + light.y * light.y
@@ -250,19 +253,24 @@ main(int argc, char **argv)
             projected.p[2].y *= 0.5f * (float)y_max;
 
             // Finally, we get to draw 'pixels' to our screen.
+            cchar_t wch;
             if (mode == SHADED) {
-                attr_set(A_NORMAL, lum_to_pair(light_dp), NULL);
-                fill_tri(&projected, '#');
+                // attr_set(A_NORMAL, lum_to_pair(light_dp), NULL);
+                setcchar(&wch, L"\u2588", A_NORMAL,
+                         lum_to_pair(light_dp), NULL);
+                fill_tri(&projected, &wch);
             }
             if (mode == OUTLINED) {
-                attr_set(A_NORMAL, lum_to_pair(light_dp), NULL);
-                fill_tri(&projected, '#');
-                attr_set(A_NORMAL, lum_to_pair(light_dp * 0.33f), NULL);
-                draw_tri(&projected, '#');
+                setcchar(&wch, L"\u2588", A_NORMAL,
+                         lum_to_pair(light_dp), NULL);
+                fill_tri(&projected, &wch);
+                setcchar(&wch, L"\u2588", A_NORMAL,
+                         lum_to_pair(light_dp * 0.34f), NULL);
+                draw_tri(&projected, &wch);
             }
             if (mode == WIREFRAME) {
-                attr_set(A_BOLD, lum_to_pair(1.0f), NULL);
-                draw_tri(&projected, '#');
+                setcchar(&wch, L"\u2588", A_NORMAL, lum_to_pair(1.0f), NULL);
+                draw_tri(&projected, &wch);
             }
             
         }
@@ -277,7 +285,10 @@ main(int argc, char **argv)
         frame_cnt++;
         refresh();
         // Sleep for 1/30th of a second.
-        usleep(33330);
+        struct timespec dur = { .tv_sec = 0, .tv_nsec = 33330000 };
+        struct timespec rem = { 0 };
+        while (nanosleep(&dur, &rem) != 0)
+			dur = rem;
     }
 
 cleanup:
@@ -395,7 +406,7 @@ normal_tri(const tri *t, vec3 *normal) {
 // adapted from:
 //   https://github.com/OneLoneCoder/Javidx9/tree/master/ConsoleGameEngine
 void
-draw_line(int x1, int y1, int x2, int y2, chtype ch)
+draw_line(int x1, int y1, int x2, int y2, const cchar_t *wch)
 {
     int x, y, dx, dy, dx1, dy1, px, py, xe, ye, i;
 
@@ -411,7 +422,7 @@ draw_line(int x1, int y1, int x2, int y2, chtype ch)
             x = x2; y = y2; xe = x1;
         }
 
-        mvaddch(y, x, ch);
+        mvadd_wch(y, x, wch);
 
         for (i = 0; x<xe; i++) {
             x = x + 1;
@@ -426,7 +437,7 @@ draw_line(int x1, int y1, int x2, int y2, chtype ch)
                 }
                 px = px + 2 * (dy1 - dx1);
             }
-            mvaddch(y, x, ch);
+            mvadd_wch(y, x, wch);
         }
     }
     else {
@@ -437,7 +448,7 @@ draw_line(int x1, int y1, int x2, int y2, chtype ch)
             x = x2; y = y2; ye = y1;
         }
 
-        mvaddch(y, x, ch);
+        mvadd_wch(y, x, wch);
 
         for (i = 0; y<ye; i++) {
             y = y + 1;
@@ -452,18 +463,18 @@ draw_line(int x1, int y1, int x2, int y2, chtype ch)
                 }
                 py = py + 2 * (dx1 - dy1);
             }
-            mvaddch(y, x, ch);
+            mvadd_wch(y, x, wch);
         }
     }
 }
 
 
 void
-draw_tri(const tri *t, chtype ch)
+draw_tri(const tri *t, const cchar_t *wch)
 {
-    draw_line((int)t->p[0].x, (int)t->p[0].y, (int)t->p[1].x, (int)t->p[1].y, ch);
-    draw_line((int)t->p[1].x, (int)t->p[1].y, (int)t->p[2].x, (int)t->p[2].y, ch);
-    draw_line((int)t->p[2].x, (int)t->p[2].y, (int)t->p[0].x, (int)t->p[0].y, ch);
+    draw_line((int)t->p[0].x, (int)t->p[0].y, (int)t->p[1].x, (int)t->p[1].y, wch);
+    draw_line((int)t->p[1].x, (int)t->p[1].y, (int)t->p[2].x, (int)t->p[2].y, wch);
+    draw_line((int)t->p[2].x, (int)t->p[2].y, (int)t->p[0].x, (int)t->p[0].y, wch);
 }
 
 // adapted from:
@@ -472,7 +483,7 @@ draw_tri(const tri *t, chtype ch)
 //   https://www.avrfreaks.net/sites/default/files/triangles.c
 //   (dead link)
 void
-fill_tri(const tri *t, chtype ch)
+fill_tri(const tri *t, const cchar_t *wch)
 {
     int x1 = (int)t->p[0].x;
     int x2 = (int)t->p[1].x;
@@ -558,7 +569,7 @@ fill_tri(const tri *t, chtype ch)
 	if (maxx<t1x) { maxx = t1x; } if (maxx<t2x) { maxx = t2x; }
         //drawline(minx, maxx, y);    // Draw line from min to max points found on the y
         for(int i = minx; i <= maxx; i++) {
-            mvaddch(y, i, ch);
+            mvadd_wch(y, i, wch);
         }
 	// Now increase y
 	if (!changed1) { t1x += signx1; }
@@ -620,7 +631,7 @@ fill_tri(const tri *t, chtype ch)
 	if (maxx<t1x) {maxx = t1x;}
         if (maxx<t2x) {maxx = t2x;}
         for(int i = minx; i <= maxx; i++) {
-            mvaddch(y, i, ch);
+            mvadd_wch(y, i, wch);
         }
 	if (!changed1) { t1x += signx1; }
 	t1x += t1xp;

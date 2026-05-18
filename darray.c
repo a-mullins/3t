@@ -19,7 +19,7 @@ darray_init(darray *d, size_t elem_size)
 void *
 darray_get(darray *d, size_t n)
 {
-    return d->buf + d->elem_size * n;
+    return (char *)d->buf + d->elem_size * n;
 }
 
 
@@ -31,7 +31,7 @@ darray_push(darray *d, void *elem)
         // FIXME if realloc fails, we loose access to d->buf pointer
         d->buf = realloc(d->buf, d->elem_size * d->cap);
     }
-    memcpy(d->buf + d->len * d->elem_size, elem, d->elem_size);
+    memcpy((char *)d->buf + d->len * d->elem_size, elem, d->elem_size);
     d->len++;
 }
 

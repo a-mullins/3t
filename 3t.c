@@ -1,10 +1,6 @@
-// Nota bene: I have chosen to do little error handling in this
-// program. It is primarily educational. If you choose to use portions
-// of this code, do so with that in mind.
-
+#include <curses.h>
 #include <locale.h>
 #include <math.h>    // for sinf(), cosf(), tanf(), M_PI
-#include <ncurses.h>
 #include <stdbool.h>
 #include <stdio.h>   // fopen, fprintf, etc
 #include <stdlib.h>  // for abs()
@@ -13,7 +9,8 @@
 #include <wchar.h>   // for wint_t, wchar_t, etc.
 #include "darray.h"
 
-#define LEN(X) sizeof (X) / sizeof (X[0]);
+
+#define LEN(X) (sizeof (X) / sizeof (X)[0])
 #define SWAP(M, N) { M ^= N; \
                      N ^= M; \
                      M ^= N; }
@@ -29,13 +26,270 @@ typedef struct tri {
 } tri;
 
 typedef struct mesh {
+    char name[32];
+    tri *tris;    
     int len;
-    tri *tris;
+    float radius;
 } mesh;
 
 typedef struct mat4x4 {
     float m[4][4];
 } mat4x4;
+
+
+// -=[ VECTOR AND MATRIX OPERATIONS ]=-----------------------------------------
+void mul_mat_vec(const mat4x4 *m, const vec3 *i, vec3 *o);
+void mul_mat_tri(const mat4x4 *m, const tri *t, tri *to);
+void add_vec(const vec3 *v1, const vec3 *v2, vec3 *vo);
+void sub_vec(const vec3 *v1, const vec3 *v2, vec3 *vo);
+void mul_scalar_vec(float f, const vec3 *v, vec3 *vo);
+void div_scalar_vec(float f, const vec3 *v, vec3 *vo);
+void add_tri_vec(const tri *t, const vec3 *v, tri *to);
+void normal_tri(const tri *t, vec3 *normal);
+
+
+// -=[ DRAWING FUNCTIONS ]=----------------------------------------------------
+void draw_line(int x1, int y1, int x2, int y2, chtype ch);
+void draw_tri(const tri *t, chtype ch);
+void fill_tri(const tri *t, chtype ch);
+
+
+// -=[ UTILITY FUNCTIONS ]=----------------------------------------------------
+void ncurses_startup();
+bool load_mesh(const char *path, mesh *m);
+int z_cmp(const void *a, const void *b);
+short lum_to_pair(const float f);
+
+
+// -=[ GLOBALS ]=--------------------------------------------------------------
+static const short grays[] = { /*0,*/
+     232, 233, 234, 235, 236, 237, 238, 239, 240, 241, 242, 243, 244,
+     245, 246, 247, 248, 249, 250, 251, 252, 253, 254, 255, 15};
+
+
+// -=[ MAIN ]=-----------------------------------------------------------------
+int
+main(int argc, char **argv)
+{
+    if (argc <= 1) {
+        printf("usage: %s <model.obj>\n", argv[0]);
+        return 1;
+    }
+
+    darray meshes;
+    darray_init(&meshes, sizeof (mesh));
+    size_t mesh_i = 0;
+    for (int i = 1; i < argc && i < 8; i++) {
+        mesh m = {0};
+        load_mesh(argv[i], &m);
+        darray_push(&meshes, &m);
+    }
+
+    ncurses_startup();
+
+    // Needed for the perspective transform.
+    float near = 0.1f;
+    float far = 1000.0f;
+    float fov = 86.0f;
+
+    mat4x4 rot_z = {0};
+    mat4x4 rot_x = {0};
+
+    vec3 camera = {0};
+
+    // Colors
+    for (short i = 0; i < (short)LEN(grays); i++)
+         init_pair(i+1, grays[i], 0);
+
+    int y_max, x_max;
+    getmaxyx(stdscr, y_max, x_max);
+    unsigned long long frame_cnt = 0;
+    //float target_fps = 15;
+    darray tris_to_draw;
+    darray_init(&tris_to_draw, sizeof (tri));
+
+    typedef enum render_mode {SHADED, WIREFRAME, OUTLINED, NUM} render_mode;
+    char *render_mode_str[NUM] = {"shaded", "wireframe", "outlined"};
+    render_mode mode = SHADED;
+
+    // MAIN LOOP
+    while( 1 ) {
+        getmaxyx(stdscr, y_max, x_max);
+
+        int key_pressed = 0;
+        while((key_pressed = getch()) != ERR) {
+            switch(key_pressed) {
+            case 'q':
+                goto cleanup;
+                break;
+            case 'm':
+                mode = (mode + 1) % NUM;
+                break;
+            case KEY_RIGHT:
+                mesh_i = (++mesh_i) % meshes.len;
+                break;
+            case KEY_LEFT:
+                mesh_i = mesh_i == 0 ? meshes.len - 1 : mesh_i -1;
+                break;
+            }
+        }
+
+        mesh *m_p = darray_get(&meshes, mesh_i);
+
+        // Transform needs to be recalculated in case the window size changes.
+        // The 2x coeff to the aspect ratio is to correct for the fact that
+        // characters are not square.
+        float aspect = 2 * ((float)y_max / (float)x_max);
+        float fov_rad = 1 / tanf(fov * 0.5f / 180.0f * (float)M_PI);
+        mat4x4 mat_proj = { .m = {
+                {aspect * fov_rad, 0.0f,    0.0f,                       0.0f},
+                {0.0f,             fov_rad, 0.0f,                       0.0f},
+                {0.0f,             0.0f,    far / (far - near),         1.0f},
+                {0.0f,             0.0f,    (-far*near) / (far - near), 0.0f}
+            }};
+
+        float theta = (float)frame_cnt / 15.0f / (float)(0.5f*M_PI);
+
+        rot_z.m[0][0] = cosf(theta);
+        rot_z.m[0][1] = sinf(theta);
+        rot_z.m[1][0] = -sinf(theta);
+        rot_z.m[1][1] = cosf(theta);
+        rot_z.m[2][2] = 1;
+        rot_z.m[3][3] = 1;
+
+        rot_x.m[0][0] = 1;
+        rot_x.m[1][1] = cosf(theta * 0.5f);
+        rot_x.m[1][2] = sinf(theta * 0.5f);
+        rot_x.m[2][1] = -sinf(theta * 0.5f);
+        rot_x.m[2][2] = cosf(theta * 0.5f);
+        rot_x.m[3][3] = 1;
+
+        // Cull.
+        // Collect only the triangles we want to draw.
+        darray_clear(&tris_to_draw);
+
+        for(int i = 0; i < m_p->len; i++) {
+            // we must use seperate vars for each input and output,
+            // because mul_mat_vec assumes the input vector doesn't
+            // change.
+            tri t = *(m_p->tris + i);
+
+            // Rotate around z axis.
+            tri rotated_z;
+            mul_mat_tri(&rot_z, &t, &rotated_z);
+
+            // Rotate around x axis.
+            tri rotated_zx;
+            mul_mat_tri(&rot_x, &rotated_z, &rotated_zx);
+
+            // Translate away from camera.
+            tri translated;
+            add_tri_vec(&rotated_zx,
+                        &(vec3){.x = 0, .y = 0, .z = m_p->radius * 1.7},
+                        &translated);
+
+            // Find triangle normal.
+            vec3 normal;
+            normal_tri(&translated, &normal);
+
+            // Should this face be drawn?
+            float D = normal.x * (translated.p[0].x - camera.x)
+                + normal.y * (translated.p[0].y - camera.y)
+                + normal.z * (translated.p[0].z - camera.z);
+
+            if(D < 0.0f) {
+                darray_push(&tris_to_draw, &translated);
+            }
+        }
+
+        // Sort triangles by z-depth, so that ones farther away can be
+        // drawn before closer ones.
+        qsort(tris_to_draw.buf,
+              tris_to_draw.len,
+              tris_to_draw.elem_size,
+              z_cmp);
+
+        // Clear screen before we draw.
+        erase();
+
+        // Draw the triangles.
+        for(size_t i = 0; i < tris_to_draw.len; i++) {
+            tri t = *(tri *)darray_get(&tris_to_draw, i);
+            vec3 normal;
+            normal_tri(&t, &normal);
+
+            // Light tris by global illumination.
+            vec3 light = { 0.0f, 0.0f, -1.0f };
+            // normalize light vec
+            float l = sqrtf(light.x * light.x
+                      + light.y * light.y
+                      + light.z * light.z);
+            light.x /= l; light.y /= l; light.z /= l;
+            float light_dp = light.x * normal.x
+                + light.y * normal.y
+                + light.z * normal.z;
+
+            tri projected = {0};
+            // Apply perspective transform to each point,
+            // that is, project triangle from 3d into 2d.
+            mul_mat_tri(&mat_proj, &t, &projected);
+
+            // Each point has a range of -1 to +1, so it must be
+            // scaled into screen space.
+            projected.p[0].x += 1.0f; projected.p[0].y += 1.0f;
+            projected.p[1].x += 1.0f; projected.p[1].y += 1.0f;
+            projected.p[2].x += 1.0f; projected.p[2].y += 1.0f;
+
+            // This could be collapsed by using a 3x1 transform
+            // and scalar multiply.
+            projected.p[0].x *= 0.5f * (float)x_max;
+            projected.p[0].y *= 0.5f * (float)y_max;
+            projected.p[1].x *= 0.5f * (float)x_max;
+            projected.p[1].y *= 0.5f * (float)y_max;
+            projected.p[2].x *= 0.5f * (float)x_max;
+            projected.p[2].y *= 0.5f * (float)y_max;
+
+            // Finally, we get to draw 'pixels' to our screen.
+            if (mode == SHADED) {
+                attr_set(A_NORMAL, lum_to_pair(light_dp), NULL);
+                fill_tri(&projected, '#');
+            }
+            if (mode == OUTLINED) {
+                attr_set(A_NORMAL, lum_to_pair(light_dp), NULL);
+                fill_tri(&projected, '#');
+                attr_set(A_NORMAL, lum_to_pair(light_dp * 0.33f), NULL);
+                draw_tri(&projected, '#');
+            }
+            if (mode == WIREFRAME) {
+                attr_set(A_BOLD, lum_to_pair(1.0f), NULL);
+                draw_tri(&projected, '#');
+            }
+            
+        }
+        attr_set(A_NORMAL, 0, NULL);
+
+        mvprintw(0, 1, "mesh name: %s", m_p->name);
+        mvprintw(1, 0, "rendermode: %s", render_mode_str[mode]);
+        mvprintw(2, 2, "term size: %d col, %d row", x_max, y_max);
+        mvprintw(3, 0, "frame count: %lld", frame_cnt);
+        // mvprintw(4, 10, "theta/pi: ", (float)theta / M_PI)
+
+        frame_cnt++;
+        refresh();
+        // Sleep for 1/30th of a second.
+        usleep(33330);
+    }
+
+cleanup:
+    darray_free(&tris_to_draw);
+    for(size_t i = 0; i < meshes.len; i++) {
+        mesh *m_p = darray_get(&meshes, i);
+        free(m_p->tris);
+    }
+    darray_free(&meshes);
+    endwin();
+    return 0;
+}
 
 
 // -=[ VECTOR AND MATRIX OPERATIONS ]=-----------------------------------------
@@ -137,8 +391,7 @@ normal_tri(const tri *t, vec3 *normal) {
     normal->z /= l;
 }
 
-
-// -=[ DRAWING FUNCTIONS ]=----------------------------------------------------
+// -=[ RASTERIZING FUNCTIONS ]=------------------------------------------------
 // adapted from:
 //   https://github.com/OneLoneCoder/Javidx9/tree/master/ConsoleGameEngine
 void
@@ -383,6 +636,8 @@ fill_tri(const tri *t, chtype ch)
 void
 ncurses_startup()
 {
+    // TODO handle errors if, eg, start_color() fails.
+    
     // per the advice of `man ncurses`
     setlocale(LC_ALL, "");
 
@@ -399,13 +654,17 @@ ncurses_startup()
 
     // color
     start_color();
-    use_default_colors();
 }
 
 
 bool load_mesh(const char *path, mesh *m) {
     FILE *fp = fopen(path, "r");
-    if(fp == NULL) {fprintf(stderr, "couldn't open %s", path); return false;}
+    if(fp == NULL) {
+        fprintf(stderr, "couldn't open %s", path);
+        return false;
+    }
+
+    float radius = 0.0f;
 
     size_t vec_cap = 16;
     size_t vec_len = 0;
@@ -424,9 +683,12 @@ bool load_mesh(const char *path, mesh *m) {
             vec_cap <<= 1;
             vecs = realloc(vecs, vec_cap * sizeof (vec3));
         }
-
         *(vecs + vec_len) = v;
         vec_len++;
+
+        float dist = cbrtf(powf(v.x, 3) + powf(v.y, 3) + powf(v.z, 3));
+        if (dist > radius)
+            radius = dist;
     }
 
     rewind(fp);
@@ -455,8 +717,10 @@ bool load_mesh(const char *path, mesh *m) {
         tri_len++;
     }
 
-    m->len = (int)tri_len;
     m->tris = calloc(tri_len, sizeof (tri));
+    m->len = (int)tri_len;
+    strncpy(m->name, path, 32);
+    m->radius = radius;
     memcpy(m->tris, tris, tri_len * sizeof (tri));
 
     return true;
@@ -476,228 +740,10 @@ z_cmp(const void *a, const void *b)
     return 0;
 }
 
-
-// -=[ MAIN ]=-----------------------------------------------------------------
-int
-main()
+short
+lum_to_pair(const float f)
 {
-    // Mesh files to load.
-    char *ms_str[] = {"snowflake.obj", "cube.obj"};
-    int ms_len = LEN(ms_str);
-    int ms_i = 0;
-    // Yes this is a VLA. I try to avoid them but...
-    mesh ms[ms_len];
-    for(int i = 0; i<ms_len; i++) {
-        load_mesh(ms_str[i], &ms[i]);
-    }
-
-    ncurses_startup();
-
-    // Needed for the perspective transform.
-    float near = 0.1f;
-    float far = 1000.0f;
-    float fov = 86.0f;
-
-    mat4x4 rot_z = {0};
-    mat4x4 rot_x = {0};
-
-    vec3 camera = {0};
-
-    // Colors
-    // short default_pair = 0;
-    // init_pair(default_pair, -1, -1);
-    // int shades = 128;
-    // for(int i = 0; i <= shades && i < COLOR_PAIRS-1; i++) {
-    //     init_color((short)(i + 8),
-    //                (short)((float)i * (1000.0f / (float)shades)),
-    //                (short)((float)i * (1000.0f / (float)shades)),
-    //                (short)((float)i * (1000.0f / (float)shades)));
-    //     init_pair((short)(i+1), (short)(i+8), -1);
-    // }
-
-    int y_max, x_max;
-    getmaxyx(stdscr, y_max, x_max);
-    unsigned long long frame_cnt = 0;
-    //float target_fps = 15;
-    darray tris_to_draw;
-    darray_init(&tris_to_draw, sizeof (tri));
-
-    typedef enum render_mode {SHADED, WIREFRAME, OUTLINED, NUM} render_mode;
-    char *render_mode_str[NUM] = {"shaded", "wireframe", "outlined"};
-    render_mode mode = SHADED;
-
-    // MAIN LOOP
-    while( 1 ) {
-        getmaxyx(stdscr, y_max, x_max);
-
-        int key_pressed = 0;
-        while((key_pressed = getch()) != ERR) {
-            switch(key_pressed) {
-            case 'q':
-                goto cleanup;
-                break;
-            case 'm':
-                mode = (mode + 1) % NUM;
-                break;
-            case KEY_RIGHT:
-                ms_i = (ms_i + 1) % ms_len;
-                break;
-            case KEY_LEFT:
-                if (ms_i == 0) {ms_i = ms_len-1;}
-                else           {ms_i = ms_i - 1;}
-                break;
-            }
-        }
-
-        // Transform needs to be recalculated in case the window size changes.
-        // The 2x coeff to the aspect ratio is to correct for the fact that
-        // characters are not square.
-        float aspect = 2 * ((float)y_max / (float)x_max);
-        float fov_rad = 1 / tanf(fov * 0.5f / 180.0f * (float)M_PI);
-        mat4x4 mat_proj = { .m = {
-                {aspect * fov_rad, 0.0f,    0.0f,                       0.0f},
-                {0.0f,             fov_rad, 0.0f,                       0.0f},
-                {0.0f,             0.0f,    far / (far - near),         1.0f},
-                {0.0f,             0.0f,    (-far*near) / (far - near), 0.0f}
-            }};
-
-        float theta = (float)frame_cnt / 15.0f / (float)(0.5f*M_PI);
-
-        rot_z.m[0][0] = cosf(theta);
-        rot_z.m[0][1] = sinf(theta);
-        rot_z.m[1][0] = -sinf(theta);
-        rot_z.m[1][1] = cosf(theta);
-        rot_z.m[2][2] = 1;
-        rot_z.m[3][3] = 1;
-
-        rot_x.m[0][0] = 1;
-        rot_x.m[1][1] = cosf(theta * 0.5f);
-        rot_x.m[1][2] = sinf(theta * 0.5f);
-        rot_x.m[2][1] = -sinf(theta * 0.5f);
-        rot_x.m[2][2] = cosf(theta * 0.5f);
-        rot_x.m[3][3] = 1;
-
-        // Cull.
-        // Collect only the triangles we want to draw.
-        darray_clear(&tris_to_draw);
-
-        for(int i = 0; i < ms[ms_i].len; i++) {
-            // we must use seperate vars for each input and output,
-            // because mul_mat_vec assumes the input vector doesn't
-            // change.
-            tri t;
-            t = *(ms[ms_i].tris + i);
-
-            // Rotate around z axis.
-            tri rotated_z;
-            mul_mat_tri(&rot_z, &t, &rotated_z);
-
-            // Rotate around x axis.
-            tri rotated_zx;
-            mul_mat_tri(&rot_x, &rotated_z, &rotated_zx);
-
-            // Translate away from camera.
-            tri translated;
-            add_tri_vec(&rotated_zx,
-                        &(vec3){.x = 0, .y = 0, .z = 2.0f},
-                        &translated);
-
-            // Find triangle normal.
-            vec3 normal;
-            normal_tri(&translated, &normal);
-
-            // Should this face be drawn?
-            float D = normal.x * (translated.p[0].x - camera.x)
-                + normal.y * (translated.p[0].y - camera.y)
-                + normal.z * (translated.p[0].z - camera.z);
-
-            if(D < 0.0f) {
-                darray_push(&tris_to_draw, &translated);
-            }
-        }
-
-        // Sort triangles by z-depth, so that ones farther away can be
-        // drawn before closer ones.
-        qsort(tris_to_draw.buf,
-              tris_to_draw.len,
-              tris_to_draw.elem_size,
-              z_cmp);
-
-        // Clear screen before we draw.
-        erase();
-
-        // Draw the triangles.
-        for(size_t i = 0; i < tris_to_draw.len; i++) {
-            tri t = *(tri *)darray_get(&tris_to_draw, i);
-            vec3 normal;
-            normal_tri(&t, &normal);
-
-            // Light tris by global illumination.
-            vec3 light = { 0.0f, 0.0f, -1.0f };
-            // normalize light vec
-            float l = sqrtf(light.x * light.x
-                      + light.y * light.y
-                      + light.z * light.z);
-            light.x /= l; light.y /= l; light.z /= l;
-            float light_dp = light.x * normal.x
-                + light.y * normal.y
-                + light.z * normal.z;
-
-            tri projected = {0};
-            // Apply perspective transform to each point,
-            // that is, project triangle from 3d into 2d.
-            mul_mat_tri(&mat_proj, &t, &projected);
-
-            // Each point has a range of -1 to +1, so it must be
-            // scaled into screen space.
-            projected.p[0].x += 1.0f; projected.p[0].y += 1.0f;
-            projected.p[1].x += 1.0f; projected.p[1].y += 1.0f;
-            projected.p[2].x += 1.0f; projected.p[2].y += 1.0f;
-
-            // This could be collapsed by using a 3x1 transform
-            // and scalar multiply.
-            projected.p[0].x *= 0.5f * (float)x_max;
-            projected.p[0].y *= 0.5f * (float)y_max;
-            projected.p[1].x *= 0.5f * (float)x_max;
-            projected.p[1].y *= 0.5f * (float)y_max;
-            projected.p[2].x *= 0.5f * (float)x_max;
-            projected.p[2].y *= 0.5f * (float)y_max;
-
-            // Finally, we get to draw 'pixels' to our screen.
-            if (mode == SHADED) {
-              if (light_dp >= 0.3) {
-                attr_set(A_DIM, 0, NULL);
-              }
-              if (light_dp >= 0.7) {
-                attr_set(A_BOLD, 0, NULL);
-              }
-              fill_tri(&projected, '#');
-            } else if (mode == OUTLINED) {
-                fill_tri(&projected, '#');
-                draw_tri(&projected, ' ');
-            } else {
-                draw_tri(&projected, '#');
-            }
-        }
-        attr_set(A_NORMAL, 0, NULL);
-
-        mvprintw(0, 7, "mesh: %s", ms_str[ms_i]);
-        mvprintw(1, 0, "rendermode: %s", render_mode_str[mode]);
-        mvprintw(2, 2, "term size: %d col, %d row", x_max, y_max);
-        mvprintw(3, 0, "frame count: %lld", frame_cnt);
-        // mvprintw(4, 10, "theta/pi: ", (float)theta / M_PI)
-
-        frame_cnt++;
-        refresh();
-        // Sleep for 1/30th of a second.
-        usleep(33330);
-    }
-
-cleanup:
-    darray_free(&tris_to_draw);
-    for(int i = 0; i < ms_len; i++) {
-        free(ms[i].tris);
-    }
-    endwin();
-    return 0;
+	if (f < 0.0f) return 1;
+	if (f > 1.0f) return LEN(grays);
+	return 1 + (short)(f * LEN(grays) - 1);
 }

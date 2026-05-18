@@ -439,7 +439,7 @@ void cross_prod_vec4(const vec4 *v1, const vec4 *v2, vec4 *vo) {
 
 float dot_prod_vec4(const vec4 *v1, const vec4 *v2) {
     /* TODO Account for w. Or don't. */
-    return v1->x*v2->x + v1->y*v2->y + v1->z * v2->z;
+    return v1->x*v2->x + v1->y*v2->y + v1->z*v2->z + v1->w*v2->w;
 }
 
 void
@@ -781,10 +781,10 @@ bool load_mesh(const char *path, mesh *m) {
     char line[80];
 
     // Scan for verticies.
-    vec4 v;
     while(fgets(line, 80, fp) != NULL) {
         if(line[0] != 'v') { continue; }
 
+	vec4 v = {0.0f, 0.0f, 0.0f, 1.0f};
         sscanf(line, "v %f %f %f", &v.x, &v.y, &v.z);
 
         if(vec_len + 1 >= vec_cap) {

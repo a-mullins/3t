@@ -20,17 +20,17 @@
 
 
 // -=[ STRUCTS / TYPES ]=------------------------------------------------------
-typedef struct vec3 {
-    float x, y, z;
-} vec3;
+typedef struct vec4 {
+    float x, y, z, w;
+} vec4;
 
 typedef struct tri {
-    vec3 p[3];
+    vec4 p[3];
 } tri;
 
 typedef struct mesh {
     char name[32];
-    tri *tris;    
+    tri *tris;
     int len;
     float radius;
 } mesh;
@@ -41,14 +41,28 @@ typedef struct mat4x4 {
 
 
 // -=[ VECTOR AND MATRIX OPERATIONS ]=-----------------------------------------
-void mul_mat_vec(const mat4x4 *m, const vec3 *i, vec3 *o);
+/* TODO rename as <noun>_<verb> */
+void mul_mat_vec(const mat4x4 *m, const vec4 *i, vec4 *o);
 void mul_mat_tri(const mat4x4 *m, const tri *t, tri *to);
-void add_vec(const vec3 *v1, const vec3 *v2, vec3 *vo);
-void sub_vec(const vec3 *v1, const vec3 *v2, vec3 *vo);
-void mul_scalar_vec(float f, const vec3 *v, vec3 *vo);
-void div_scalar_vec(float f, const vec3 *v, vec3 *vo);
-void add_tri_vec(const tri *t, const vec3 *v, tri *to);
-void normal_tri(const tri *t, vec3 *normal);
+void add_vec(const vec4 *v1, const vec4 *v2, vec4 *vo);
+void sub_vec(const vec4 *v1, const vec4 *v2, vec4 *vo);
+void mul_scalar_vec(float f, const vec4 *v, vec4 *vo);
+void div_scalar_vec(float f, const vec4 *v, vec4 *vo);
+void add_tri_vec(const tri *t, const vec4 *v, tri *to);
+/* TODO Rename as tri_surface_normal */
+void normal_tri(const tri *t, vec4 *normal);
+void normalize_vec4(vec4 *v);
+float len_vec4(const vec4 *v);
+void cross_prod_vec4(const vec4 *v1, const vec4 *v2, vec4 *vo);
+float dot_prod_vec4(const vec4 *v1, const vec4 *v2);
+
+/* TODO I think camera matrix is the more common term than projection matrix? */
+void init_projection_mat(float fov_degrees, float aspect, float near,
+                         float far, mat4x4 *m);
+void init_rotx_mat(float theta, mat4x4 *m);
+void init_roty_mat(float theta, mat4x4 *m);
+void init_rotz_mat(float theta, mat4x4 *m);
+void init_trans_mat(float x, float y, float z, mat4x4 *m);
 
 
 // -=[ RASTERIZATION FUNCTIONS ]=----------------------------------------------
@@ -93,12 +107,13 @@ main(int argc, char **argv)
     // Needed for the perspective transform.
     float near = 0.1f;
     float far = 1000.0f;
-    float fov = 86.0f;
+    float fov = 75.0f;
 
-    mat4x4 rot_z = {0};
-    mat4x4 rot_x = {0};
+    mat4x4 rot_z;
+    mat4x4 rot_x;
+    mat4x4 trans;
 
-    vec3 camera = {0};
+    vec4 camera = {0};
 
     // Colors
     for (short i = 0; i < (short)LEN(grays); i++)
@@ -111,9 +126,9 @@ main(int argc, char **argv)
     darray tris_to_draw;
     darray_init(&tris_to_draw, sizeof (tri));
 
-    typedef enum render_mode {SHADED, WIREFRAME, OUTLINED, NUM} render_mode;
-    char *render_mode_str[NUM] = {"shaded", "wireframe", "outlined"};
-    render_mode mode = SHADED;
+    typedef enum render_mode {WIREFRAME, X_RAY, SHADED, OUTLINED, NUM} render_mode;
+    char *render_mode_str[NUM] = {"wireframe", "x-ray", "shaded", "outlined"};
+    render_mode mode = OUTLINED;
 
     // MAIN LOOP
     while( 1 ) {
@@ -140,38 +155,26 @@ main(int argc, char **argv)
         mesh *m_p = darray_get(&meshes, mesh_i);
 
         // Transform needs to be recalculated in case the window size changes.
-        // The 2x coeff to the aspect ratio is to correct for the fact that
-        // characters are not square.
-        float aspect = 2 * ((float)y_max / (float)x_max);
-        float fov_rad = 1 / tanf(fov * 0.5f / 180.0f * M_PIf);
-        mat4x4 mat_proj = { .m = {
-                {aspect * fov_rad, 0.0f,    0.0f,                       0.0f},
-                {0.0f,             fov_rad, 0.0f,                       0.0f},
-                {0.0f,             0.0f,    far / (far - near),         1.0f},
-                {0.0f,             0.0f,    (-far*near) / (far - near), 0.0f}
-            }};
+        // The coeff to the aspect ratio is to correct for the fact that
+        // characters are typically taller than they are wide.
+        mat4x4 mat_proj;
+        init_projection_mat(fov, 2.0f * ((float)y_max / (float)x_max),
+                            near, far, &mat_proj);
 
         float theta = (float)frame_cnt / 15.0f / (0.5f * M_PIf);
 
-        rot_z.m[0][0] = cosf(theta);
-        rot_z.m[0][1] = sinf(theta);
-        rot_z.m[1][0] = -sinf(theta);
-        rot_z.m[1][1] = cosf(theta);
-        rot_z.m[2][2] = 1;
-        rot_z.m[3][3] = 1;
-
-        rot_x.m[0][0] = 1;
-        rot_x.m[1][1] = cosf(theta * 0.5f);
-        rot_x.m[1][2] = sinf(theta * 0.5f);
-        rot_x.m[2][1] = -sinf(theta * 0.5f);
-        rot_x.m[2][2] = cosf(theta * 0.5f);
-        rot_x.m[3][3] = 1;
+        init_rotx_mat(theta, &rot_x);
+        init_rotz_mat(theta, &rot_z);
 
         // Cull.
         // Collect only the triangles we want to draw.
         darray_clear(&tris_to_draw);
 
         for(int i = 0; i < m_p->len; i++) {
+            // TODO we can calculate one world matrix and move it
+            // outside of the for loop to drastically reduce the
+            // number of calculations.
+               
             // we must use seperate vars for each input and output,
             // because mul_mat_vec assumes the input vector doesn't
             // change.
@@ -185,22 +188,21 @@ main(int argc, char **argv)
             tri rotated_zx;
             mul_mat_tri(&rot_x, &rotated_z, &rotated_zx);
 
-            // Translate away from camera.
+            // Translate away from camera.            
             tri translated;
-            add_tri_vec(&rotated_zx,
-                        &(vec3){.x = 0, .y = 0, .z = m_p->radius * 1.7f},
-                        &translated);
+            init_trans_mat(0, 0, m_p->radius * 1.7f, &trans);
+            mul_mat_tri(&trans, &rotated_zx, &translated);
 
             // Find triangle normal.
-            vec3 normal;
+            vec4 normal;
             normal_tri(&translated, &normal);
 
             // Should this face be drawn?
-            float D = normal.x * (translated.p[0].x - camera.x)
-                + normal.y * (translated.p[0].y - camera.y)
-                + normal.z * (translated.p[0].z - camera.z);
-
-            if(D < 0.0f) {
+            /* TODO Use tri barycenter rather than first vertex? */
+            vec4 cam_ray;
+            sub_vec(&translated.p[0], &camera, &cam_ray);
+            
+            if(mode == X_RAY || (dot_prod_vec4(&normal, &cam_ray) < 0.0f)) {
                 darray_push(&tris_to_draw, &translated);
             }
         }
@@ -218,19 +220,13 @@ main(int argc, char **argv)
         // Draw the triangles.
         for(size_t i = 0; i < tris_to_draw.len; i++) {
             tri t = *(tri *)darray_get(&tris_to_draw, i);
-            vec3 normal;
+            vec4 normal;
             normal_tri(&t, &normal);
 
             // Light tris by global illumination.
-            vec3 light = { 0.5f, 0.5f, -1.0f };
-            // normalize light vec
-            float l = sqrtf(light.x * light.x
-                      + light.y * light.y
-                      + light.z * light.z);
-            light.x /= l; light.y /= l; light.z /= l;
-            float light_dp = light.x * normal.x
-                + light.y * normal.y
-                + light.z * normal.z;
+            vec4 light = { 0.5f, -0.5f, -1.0f, 0.0f };
+            normalize_vec4(&light);
+            float light_dp = dot_prod_vec4(&normal, &light);
 
             tri projected = {0};
             // Apply perspective transform to each point,
@@ -272,15 +268,21 @@ main(int argc, char **argv)
                 setcchar(&wch, L"\u2588", A_NORMAL, lum_to_pair(1.0f), NULL);
                 draw_tri(&projected, &wch);
             }
-            
+            if (mode == X_RAY) {
+                setcchar(&wch, L"\u2588", A_NORMAL,
+                         lum_to_pair(light_dp < 0.15f ? 0.15f : light_dp),
+                         NULL);
+                draw_tri(&projected, &wch);
+            }
         }
         attr_set(A_NORMAL, 0, NULL);
 
-        mvprintw(0, 1, "mesh name: %s", m_p->name);
-        mvprintw(1, 0, "rendermode: %s", render_mode_str[mode]);
+        mvprintw(0, 2, "mesh name: %s", m_p->name);
+        mvprintw(1, 1, "rendermode: %s", render_mode_str[mode]);
         mvprintw(2, 2, "term size: %d col, %d row", x_max, y_max);
         mvprintw(3, 0, "frame count: %lld", frame_cnt);
-        // mvprintw(4, 10, "theta/pi: ", (float)theta / M_PI)
+        mvprintw(4, 3, "theta/pi: %1.2f", theta / M_PIf);
+        addch(ACS_PI);
 
         frame_cnt++;
         refresh();
@@ -305,16 +307,17 @@ cleanup:
 
 // -=[ VECTOR AND MATRIX OPERATIONS ]=-----------------------------------------
 void
-mul_mat_vec(const mat4x4 *m, const vec3 *i, vec3 *o)
+mul_mat_vec(const mat4x4 *m, const vec4 *i, vec4 *o)
 {
     float w;
+    /* TODO verify that this is correct for vec4. */
     o->x = i->x * m->m[0][0] + i->y * m->m[1][0] + i->z * m->m[2][0] + m->m[3][0];
     o->y = i->x * m->m[0][1] + i->y * m->m[1][1] + i->z * m->m[2][1] + m->m[3][1];
     o->z = i->x * m->m[0][2] + i->y * m->m[1][2] + i->z * m->m[2][2] + m->m[3][2];
        w = i->x * m->m[0][3] + i->y * m->m[1][3] + i->z * m->m[2][3] + m->m[3][3];
 
     if (w != 0.0f) {
-	o->x /= w;
+        o->x /= w;
         o->y /= w;
         o->z /= w;
     }
@@ -332,60 +335,65 @@ mul_mat_tri(const mat4x4 *m, const tri *t, tri *to)
 }
 
 
-// using out param instead of returning to match mul_mat_vec, etc
 void
-add_vec(const vec3 *v1, const vec3 *v2, vec3 *vo)
+add_vec(const vec4 *v1, const vec4 *v2, vec4 *vo)
 {
     vo->x = v1->x + v2->x;
     vo->y = v1->y + v2->y;
     vo->z = v1->z + v2->z;
+    vo->w = v1->w + v2->w;
 }
 
 
 void
-sub_vec(const vec3 *v1, const vec3 *v2, vec3 *vo)
+sub_vec(const vec4 *v1, const vec4 *v2, vec4 *vo)
 {
     vo->x = v1->x - v2->x;
     vo->y = v1->y - v2->y;
     vo->z = v1->z - v2->z;
+    vo->w = v1->w - v2->w;
 }
 
 
 void
-mul_scalar_vec(float f, const vec3 *v, vec3 *vo)
+mul_scalar_vec(float f, const vec4 *v, vec4 *vo)
 {
     vo->x = v->x * f;
     vo->y = v->y * f;
     vo->z = v->z * f;
+    vo->w = v->w * f;
 }
 
 
 void
-div_scalar_vec(float f, const vec3 *v, vec3 *vo)
+div_scalar_vec(float f, const vec4 *v, vec4 *vo)
 {
     vo->x = v->x / f;
     vo->y = v->y / f;
     vo->z = v->z / f;
+    vo->w = v->w / f;
 }
 
 
 // Add vector `v` to every vector in triangle `t`.
 void
-add_tri_vec(const tri *t, const vec3 *v, tri *to)
+add_tri_vec(const tri *t, const vec4 *v, tri *to)
 {
+    /* TODO call add_vec instead */
     for(short i=0; i<3; i++) {
         to->p[i].x = t->p[i].x + v->x;
         to->p[i].y = t->p[i].y + v->y;
         to->p[i].z = t->p[i].z + v->z;
+        to->p[i].w = t->p[i].w + v->w;
     }
 }
 
 
 // Calculate the face normal for triange `t`.
 void
-normal_tri(const tri *t, vec3 *normal) {
+normal_tri(const tri *t, vec4 *normal) {
     // Find triangle normal.
-    vec3 line0, line1;
+    vec4 line0, line1;
     sub_vec(&t->p[1], &t->p[0], &line0);
     sub_vec(&t->p[2], &t->p[0], &line1);
 
@@ -394,13 +402,102 @@ normal_tri(const tri *t, vec3 *normal) {
     normal->z = line0.x * line1.y - line0.y * line1.x;
 
     // Normalize the normal vector. :-)
-    float l = sqrtf(normal->x*normal->x
-                    + normal->y*normal->y
-                    + normal->z*normal->z);
-    normal->x /= l;
-    normal->y /= l;
-    normal->z /= l;
+    normalize_vec4(normal);
 }
+
+void normalize_vec4(vec4 *v) {
+    /*
+     * TODO be more specific about which 'normalization' operation this does,
+     * since in graphics it can mean a number of different things.
+     *
+     * For future ref, we are just pretending this is a cartesion vector and
+     * ignoring w.
+     *
+     * ref: https://cs418.cs.illinois.edu/website/text/math2.html
+     * (I have Lay on hand but they don't say much about this issue.)
+     */
+    float l = len_vec4(v);
+    v->x /= l;
+    v->y /= l;
+    v->z /= l;
+}
+
+float len_vec4(const vec4 *v) {
+    /*
+     * TODO which length operation do mean? here we are pretending it's a
+     * Cartesian vector.
+     */
+    return sqrtf(dot_prod_vec4(v, v));
+}
+
+void cross_prod_vec4(const vec4 *v1, const vec4 *v2, vec4 *vo) {
+    /* TODO Account for w. Or don't. */
+    vo->x = v1->y * v2->z - v1->z * v2->y;
+    vo->y = v1->z * v2->x - v1->x * v2->z;
+    vo->z = v1->x * v2->y - v1->y * v2->x;
+}
+
+float dot_prod_vec4(const vec4 *v1, const vec4 *v2) {
+    /* TODO Account for w. Or don't. */
+    return v1->x*v2->x + v1->y*v2->y + v1->z * v2->z;
+}
+
+void
+init_projection_mat(float fov_degrees, float aspect, float near, float far,
+                    mat4x4 *m)
+{
+    memset(m, (int)0.0f, sizeof (mat4x4));
+    float fov_rad = 1.0f / tanf(fov_degrees * 0.5f / 180.0f * M_PIf);
+    m->m[0][0] = aspect * fov_rad;
+    m->m[1][1] = fov_rad;
+    m->m[2][2] = far / (far - near);
+    m->m[3][2] = (far * near) / (far - near);
+    m->m[2][3] = 1.0f;
+}
+
+void
+init_rotx_mat(float theta, mat4x4 *m)
+{
+    memset(m, (int)0.0f, sizeof (mat4x4));
+    m->m[0][0] = 1;
+    m->m[1][1] = cosf(theta * 0.5f);
+    m->m[1][2] = sinf(theta * 0.5f);
+    m->m[2][1] = -sinf(theta * 0.5f);
+    m->m[2][2] = cosf(theta * 0.5f);
+    m->m[3][3] = 1;
+}
+
+void
+init_roty_mat(float theta, mat4x4 *m)
+{
+    /* STUB */
+    memset(m, (int)0.0f, sizeof (mat4x4));
+    (void)theta; (void)m;
+}
+
+void
+init_rotz_mat(float theta, mat4x4 *m)
+{
+    memset(m, (int)0.0f, sizeof (mat4x4));
+    m->m[0][0] = cosf(theta);
+    m->m[0][1] = sinf(theta);
+    m->m[1][0] = -sinf(theta);
+    m->m[1][1] = cosf(theta);
+    m->m[2][2] = 1;
+    m->m[3][3] = 1;
+}
+
+void
+init_trans_mat(float x, float y, float z, mat4x4 *m)
+{
+    memset(m, (int)0.0f, sizeof (mat4x4));
+    for (int i = 0; i < 3; i++)
+        m->m[i][i] = 1.0f;
+    m->m[3][0] = x;
+    m->m[3][1] = y;
+    m->m[3][2] = z;
+}
+    
 
 // -=[ RASTERIZING FUNCTIONS ]=------------------------------------------------
 // adapted from:
@@ -648,7 +745,7 @@ void
 ncurses_startup()
 {
     // TODO handle errors if, eg, start_color() fails.
-    
+
     // per the advice of `man ncurses`
     setlocale(LC_ALL, "");
 
@@ -679,12 +776,12 @@ bool load_mesh(const char *path, mesh *m) {
 
     size_t vec_cap = 16;
     size_t vec_len = 0;
-    vec3 *vecs = calloc(vec_cap, sizeof (vec3));
+    vec4 *vecs = calloc(vec_cap, sizeof (vec4));
 
     char line[80];
 
     // Scan for verticies.
-    vec3 v;
+    vec4 v;
     while(fgets(line, 80, fp) != NULL) {
         if(line[0] != 'v') { continue; }
 
@@ -692,7 +789,7 @@ bool load_mesh(const char *path, mesh *m) {
 
         if(vec_len + 1 >= vec_cap) {
             vec_cap <<= 1;
-            vecs = realloc(vecs, vec_cap * sizeof (vec3));
+            vecs = realloc(vecs, vec_cap * sizeof (vec4));
         }
         *(vecs + vec_len) = v;
         vec_len++;

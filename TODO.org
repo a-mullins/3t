@@ -1,0 +1,55 @@
+#+STARTUP: content indent
+* TODO Reimplement drawing with Unicode Block Elements.
+* TODO Implement view frustum clipping/culling to fix artifacting.
+Whenever a triangle protrudes through the viewing plane it causes artifacting. Presumably this is because we do not ensure that the triangle is inside the viewing frustum before drawing it.
+* TODO Refactor from row-vects to col-vects.
+It is confusing.
+* TODO Make darray lib header-only in the style of queue.h
+* TODO Refactor (struct tri).p to .v (for vertex/vector, not point)
+* TODO Rewrite funcs like mat_tri_mul so that it modifies the given tri.
+That way other struct fields will ride along and don't need to be explicity copied.
+* TODO WASD to fly the camera around.
+* TODO Replace draw_line and draw_tri with own.
+Bresenham's and scanline for polys? Could maybe support quads with a co-planarity check.
+* TODO [#C] Use lex/yacc to write a proper parser for OBJ files.
+* ~TODO [#C] Support non-unicode modes.~
+* DONE Rewrite draw_line using Bresenham's algorithm.
+* DONE Why does it crash if LANG is banana?!
+* DONE Move struct typedefs back to struct namespace.
+* DONE Make the back_buf dynamic.
+* DONE Make the back buffer 4x the resolution.
+* DONE Load the mesh specified as a command line argument.
+* DONE Replace usleep with nanosleep.
+* DONE Add keyboard shortcuts.
+q to quit, p to pause rotation, +/- to zoom.
+* DONE Add mesh name to info.
+* DONE Refactor function names to <noun>_<verb> form.
+aka <operand>_<operator>, so that functions can be sorted and it is easy to tell
+at a glance what operations are supported on a particular data structure
+* DONE Switch back to darray (for now).
+Although widely available, queue.h(3) is not shipped on some
+systems. It isn't required by a C or POSIX standard. Because it's
+header-only it could easily be shipped with the project, but it lacks
+sorting, which is needed. Mergesort could be implemented with a little
+time, but my (alm4x) darray library already supports easy sorting by
+using stdc's qsort.
+
+Implementing mergesort over queue.h(3)'s SLIST might be an interesting
+challange later on.
+* DONE Support solid faces.
+done, and found an 'interesting' bug in tri_fill where no bounds checking was done before writing into memory. This was clobbering other parts of the program and causing a weird heisenbug.
+* DONE Lighting & shading.
+* DONE Use the painter's algorithm to hack in occlusion culling.
+Works, although there is still some occasional quirkiness.
+* DONE Refactor vec3 -> vec4
+* DONE Improve color / shading handling.
+Konsole supports 256 colors, but doesn't support redefining them. Konsole reports it does on fedora because TERM & COLORTERM are set to xterm type strings, leading to much confusion.
+
+Try to figure out a way to use color gradients anyway, maybe by querying the set color palette.
+* DONE Calculate distance object should be translated away from camera.
+Determine which vertex is furthest from an object's origin and translate it away by that much plus some epsilon for optimal viewing.
+
+Actually, this doesn't seem sufficient. Maybe using the polys barycenter would work, or
+constructing an enclosing sphere around the object.
+* DONE Add model name to struct.
+* DONE Arrow keys cycle through meshes provided as CLI args.

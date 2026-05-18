@@ -128,7 +128,7 @@ main(int argc, char **argv)
 
     typedef enum render_mode {WIREFRAME, X_RAY, SHADED, OUTLINED, NUM} render_mode;
     char *render_mode_str[NUM] = {"wireframe", "x-ray", "shaded", "outlined"};
-    render_mode mode = OUTLINED;
+    render_mode mode = WIREFRAME;
 
     // MAIN LOOP
     while( 1 ) {
@@ -142,6 +142,8 @@ main(int argc, char **argv)
                 break;
             case 'm':
                 mode = (mode + 1) % NUM;
+		if (COLORS < 256) /* TODO temp hack for linux console */
+		    mode = WIREFRAME;
                 break;
             case KEY_RIGHT:
                 mesh_i = (mesh_i + 1) % meshes.len;
@@ -282,7 +284,7 @@ main(int argc, char **argv)
                 draw_tri(&projected, &wch);
             }
             if (mode == WIREFRAME) {
-                setcchar(&wch, L"\u2588", A_NORMAL, lum_to_pair(1.0f), NULL);
+                setcchar(&wch, L"\u2588", A_NORMAL, 0, NULL);
                 draw_tri(&projected, &wch);
             }
             if (mode == X_RAY) {

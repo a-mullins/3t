@@ -162,6 +162,7 @@ main(int argc, char **argv)
                             near, far, &mat_proj);
 
         float theta = (float)frame_cnt / 15.0f / (0.5f * M_PIf);
+	/* float theta = 0.0f; */
 
         init_rotx_mat(theta, &rot_x);
         init_rotz_mat(theta, &rot_z);
@@ -247,6 +248,22 @@ main(int argc, char **argv)
             projected.p[1].y *= 0.5f * (float)y_max;
             projected.p[2].x *= 0.5f * (float)x_max;
             projected.p[2].y *= 0.5f * (float)y_max;
+
+	    // This step is to account for the fact that vector space's origin
+	    // is at the bottom left, and screen space is at the top left.
+	    mat4x4 T_trans0 = {0}, T_reflect = {0}, T_trans1 = {0};
+	    tri translated = {0}, reflected = {0};
+	    init_trans_mat(0, -y_max/2, 0, &T_trans0);
+	    init_trans_mat(0, y_max/2, 0, &T_trans1);
+	    T_reflect.m[0][0] = 1;
+	    T_reflect.m[1][1] = -1;
+	    T_reflect.m[2][2] = 1;
+	    T_reflect.m[3][3] = 1;
+
+	    mul_mat_tri(&T_trans0, &projected, &translated);
+	    mul_mat_tri(&T_reflect, &translated, &reflected);
+	    mul_mat_tri(&T_trans1, &reflected, &translated);
+	    projected = translated;
 
             // Finally, we get to draw 'pixels' to our screen.
             cchar_t wch;
@@ -762,6 +779,8 @@ ncurses_startup()
 
     // color
     start_color();
+    /* If a terminal has a transparent bg, this will keep it transparent. */
+    /* use_default_colors(); */
 }
 
 

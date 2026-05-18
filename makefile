@@ -10,10 +10,11 @@ CFLAGS = -std=gnu11 -Wall -Wextra -Wpedantic -Wconversion -g
 # CFLAGS += -I/opt/homebrew/include
 # LDFLAGS = -L/opt/homebrew/lib
 
-default: 3t
+# default: 3t
 
-3t: LDFLAGS = -lncursesw -lm
-3t: darray.c
+3t: CFLAGS += -I./include
+3t: LDFLAGS = -L./lib '-Wl,-rpath,$$ORIGIN/lib' -lalist -lncursesw -lm
+3t:
 
 clean:
-	-rm -f 3t.o darray.o 3t
+	-rm -f 3t

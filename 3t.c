@@ -9,7 +9,7 @@
 #include <time.h>
 #include <unistd.h>  // for usleep()
 #include <wchar.h>   // for wint_t, wchar_t, etc.
-#include "darray.h"
+#include "alist.h"
 
 
 #define LEN(X)     (sizeof (X) / sizeof (X)[0])
@@ -93,15 +93,15 @@ main(int argc, char **argv)
         return 1;
     }
 
-    darray meshes;
-    darray_init(&meshes, sizeof (mesh));
+    struct alist *meshes = alist_new(sizeof (mesh));
     size_t mesh_i = 0;
     for (int i = 1; i < argc && i < 8; i++) {
         mesh m = {0};
         load_mesh(argv[i], &m);
-        darray_push(&meshes, &m);
+        alist_push(meshes, &m);
     }
 
+    getchar();
     ncurses_startup();
 
     // Needed for the perspective transform.
@@ -123,8 +123,7 @@ main(int argc, char **argv)
     getmaxyx(stdscr, y_max, x_max);
     unsigned long long frame_cnt = 0;
     //float target_fps = 15;
-    darray tris_to_draw;
-    darray_init(&tris_to_draw, sizeof (tri));
+    struct alist *tris_to_draw = alist_new(sizeof (tri));
 
     typedef enum render_mode {WIREFRAME, X_RAY, SHADED, OUTLINED, NUM} render_mode;
     char *render_mode_str[NUM] = {"wireframe", "x-ray", "shaded", "outlined"};
@@ -146,15 +145,15 @@ main(int argc, char **argv)
                     mode = WIREFRAME;
                 break;
             case KEY_RIGHT:
-                mesh_i = (mesh_i + 1) % meshes.len;
+                mesh_i = (mesh_i + 1) % alist_len(meshes);
                 break;
             case KEY_LEFT:
-                mesh_i = mesh_i == 0 ? meshes.len - 1 : mesh_i -1;
+                mesh_i = mesh_i == 0 ? alist_len(meshes) - 1 : mesh_i -1;
                 break;
             }
         }
 
-        mesh *m_p = darray_get(&meshes, mesh_i);
+        mesh *m_p = alist_get(meshes, mesh_i);
 
         // Transform needs to be recalculated in case the window size changes.
         // The coeff to the aspect ratio is to correct for the fact that
@@ -171,7 +170,7 @@ main(int argc, char **argv)
 
         // Cull.
         // Collect only the triangles we want to draw.
-        darray_clear(&tris_to_draw);
+        alist_clear(tris_to_draw, NULL);
 
         for(int i = 0; i < m_p->len; i++) {
             // TODO we can calculate one world matrix and move it
@@ -206,23 +205,24 @@ main(int argc, char **argv)
             sub_vec(&translated.p[0], &camera, &cam_ray);
             
             if(mode == X_RAY || (dot_prod_vec4(&normal, &cam_ray) < 0.0f)) {
-                darray_push(&tris_to_draw, &translated);
+                alist_push(tris_to_draw, &translated);
             }
         }
 
         // Sort triangles by z-depth, so that ones farther away can be
         // drawn before closer ones.
-        qsort(tris_to_draw.buf,
-              tris_to_draw.len,
-              tris_to_draw.elem_size,
-              z_cmp);
+	alist_qsort(tris_to_draw, z_cmp);
+        // qsort(tris_to_draw.buf,
+        //       tris_to_draw.len,
+        //       tris_to_draw.elem_size,
+        //       z_cmp);
 
         // Clear screen before we draw.
         erase();
 
         // Draw the triangles.
-        for(size_t i = 0; i < tris_to_draw.len; i++) {
-            tri t = *(tri *)darray_get(&tris_to_draw, i);
+        for(size_t i = 0; i < alist_len(tris_to_draw); i++) {
+            tri t = *(tri *)alist_get(tris_to_draw, i);
             vec4 normal;
             normal_tri(&t, &normal);
 
@@ -313,12 +313,12 @@ main(int argc, char **argv)
     }
 
 cleanup:
-    darray_free(&tris_to_draw);
-    for(size_t i = 0; i < meshes.len; i++) {
-        mesh *m_p = darray_get(&meshes, i);
-        free(m_p->tris);
-    }
-    darray_free(&meshes);
+    alist_free(tris_to_draw, NULL);
+    // for(size_t i = 0; i < meshes.len; i++) {
+    //     mesh *m_p = darray_get(&meshes, i);
+    //     free(m_p->tris);
+    // }
+    alist_free(meshes, NULL);
     endwin();
     return 0;
 }
@@ -524,7 +524,7 @@ init_trans_mat(float x, float y, float z, mat4x4 *m)
 void
 draw_line(int x1, int y1, int x2, int y2, const cchar_t *wch)
 {
-    int x, y, dx, dy, dx1, dy1, px, py, xe, ye, i;
+    int x, y, dx, dy, dx1, dy1, px, py, xe, ye;
 
     dx = x2 - x1; dy = y2 - y1;
     dx1 = abs(dx); dy1 = abs(dy);
@@ -540,7 +540,7 @@ draw_line(int x1, int y1, int x2, int y2, const cchar_t *wch)
 
         mvadd_wch(y, x, wch);
 
-        for (i = 0; x<xe; i++) {
+        for ( ; x<xe; ) {
             x = x + 1;
             if (px<0) {
                 px = px + 2 * dy1;
@@ -566,7 +566,7 @@ draw_line(int x1, int y1, int x2, int y2, const cchar_t *wch)
 
         mvadd_wch(y, x, wch);
 
-        for (i = 0; y<ye; i++) {
+        for ( ; y<ye; ) {
             y = y + 1;
             if (py <= 0) {
                 py = py + 2 * dx1;

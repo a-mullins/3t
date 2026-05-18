@@ -142,8 +142,8 @@ main(int argc, char **argv)
                 break;
             case 'm':
                 mode = (mode + 1) % NUM;
-		if (COLORS < 256) /* TODO temp hack for linux console */
-		    mode = WIREFRAME;
+                if (COLORS < 256) /* TODO temp hack for linux console */
+                    mode = WIREFRAME;
                 break;
             case KEY_RIGHT:
                 mesh_i = (mesh_i + 1) % meshes.len;
@@ -164,7 +164,7 @@ main(int argc, char **argv)
                             near, far, &mat_proj);
 
         float theta = (float)frame_cnt / 15.0f / (0.5f * M_PIf);
-	/* float theta = 0.0f; */
+        /* theta = 0.0f; */
 
         init_rotx_mat(theta, &rot_x);
         init_rotz_mat(theta, &rot_z);
@@ -251,21 +251,21 @@ main(int argc, char **argv)
             projected.p[2].x *= 0.5f * (float)x_max;
             projected.p[2].y *= 0.5f * (float)y_max;
 
-	    // This step is to account for the fact that vector space's origin
-	    // is at the bottom left, and screen space is at the top left.
-	    mat4x4 T_trans0 = {0}, T_reflect = {0}, T_trans1 = {0};
-	    tri translated = {0}, reflected = {0};
-	    init_trans_mat(0, -y_max/2, 0, &T_trans0);
-	    init_trans_mat(0, y_max/2, 0, &T_trans1);
-	    T_reflect.m[0][0] = 1;
-	    T_reflect.m[1][1] = -1;
-	    T_reflect.m[2][2] = 1;
-	    T_reflect.m[3][3] = 1;
+            // This step is to account for the fact that vector space's origin
+            // is at the bottom left, and screen space is at the top left.
+            mat4x4 T_trans0 = {0}, T_reflect = {0}, T_trans1 = {0};
+            tri translated = {0}, reflected = {0};
+            init_trans_mat(0, -y_max/2, 0, &T_trans0);
+            init_trans_mat(0, y_max/2, 0, &T_trans1);
+            T_reflect.m[0][0] = 1;
+            T_reflect.m[1][1] = -1;
+            T_reflect.m[2][2] = 1;
+            T_reflect.m[3][3] = 1;
 
-	    mul_mat_tri(&T_trans0, &projected, &translated);
-	    mul_mat_tri(&T_reflect, &translated, &reflected);
-	    mul_mat_tri(&T_trans1, &reflected, &translated);
-	    projected = translated;
+            mul_mat_tri(&T_trans0, &projected, &translated);
+            mul_mat_tri(&T_reflect, &translated, &reflected);
+            mul_mat_tri(&T_trans1, &reflected, &translated);
+            projected = translated;
 
             // Finally, we get to draw 'pixels' to our screen.
             cchar_t wch;
@@ -309,7 +309,7 @@ main(int argc, char **argv)
         struct timespec dur = { .tv_sec = 0, .tv_nsec = 33330000 };
         struct timespec rem = { 0 };
         while (nanosleep(&dur, &rem) != 0)
-			dur = rem;
+                        dur = rem;
     }
 
 cleanup:
@@ -638,12 +638,12 @@ fill_tri(const tri *t, const cchar_t *wch)
     dy2 = (int)(y3 - y1);
 
     if (dy1 > dx1) {   // swap values
-	SWAP(dx1, dy1);
-	changed1 = true;
+        SWAP(dx1, dy1);
+        changed1 = true;
     }
     if (dy2 > dx2) {   // swap values
-	SWAP(dy2, dx2);
-	changed2 = true;
+        SWAP(dy2, dx2);
+        changed2 = true;
     }
 
     e2 = (int)(dx2 >> 1);
@@ -652,48 +652,48 @@ fill_tri(const tri *t, const cchar_t *wch)
     e1 = (int)(dx1 >> 1);
 
     for (int i = 0; i < dx1;) {
-	t1xp = 0; t2xp = 0;
-	if (t1x<t2x) { minx = t1x; maxx = t2x; }
-	else { minx = t2x; maxx = t1x; }
-	// process first line until y value is about to change
-	while (i<dx1) {
-	    i++;
-	    e1 += dy1;
-	    while (e1 >= dx1) {
-		e1 -= dx1;
-		if (changed1) { t1xp = signx1; }
+        t1xp = 0; t2xp = 0;
+        if (t1x<t2x) { minx = t1x; maxx = t2x; }
+        else { minx = t2x; maxx = t1x; }
+        // process first line until y value is about to change
+        while (i<dx1) {
+            i++;
+            e1 += dy1;
+            while (e1 >= dx1) {
+                e1 -= dx1;
+                if (changed1) { t1xp = signx1; }
                 else          { goto next1; }
-	    }
-	    if (changed1) { break; }
-	    else t1x += signx1;
-	}
-	// Move line
+            }
+            if (changed1) { break; }
+            else t1x += signx1;
+        }
+        // Move line
     next1:
-	// process second line until y value is about to change
-	while (1) {
-	    e2 += dy2;
-	    while (e2 >= dx2) {
-		e2 -= dx2;
-		if (changed2) { t2xp = signx2; }
-		else          { goto next2; }
-	    }
-	    if (changed2)     { break; }
-	    else              { t2x += signx2; }
-	}
+        // process second line until y value is about to change
+        while (1) {
+            e2 += dy2;
+            while (e2 >= dx2) {
+                e2 -= dx2;
+                if (changed2) { t2xp = signx2; }
+                else          { goto next2; }
+            }
+            if (changed2)     { break; }
+            else              { t2x += signx2; }
+        }
     next2:
-	if (minx>t1x) { minx = t1x; } if (minx>t2x) { minx = t2x; }
-	if (maxx<t1x) { maxx = t1x; } if (maxx<t2x) { maxx = t2x; }
+        if (minx>t1x) { minx = t1x; } if (minx>t2x) { minx = t2x; }
+        if (maxx<t1x) { maxx = t1x; } if (maxx<t2x) { maxx = t2x; }
         //drawline(minx, maxx, y);    // Draw line from min to max points found on the y
         for(int i = minx; i <= maxx; i++) {
             mvadd_wch(y, i, wch);
         }
-	// Now increase y
-	if (!changed1) { t1x += signx1; }
-	t1x += t1xp;
-	if (!changed2) { t2x += signx2; }
-	t2x += t2xp;
-	y += 1;
-	if (y == y2) { break; }
+        // Now increase y
+        if (!changed1) { t1x += signx1; }
+        t1x += t1xp;
+        if (!changed2) { t2x += signx2; }
+        t2x += t2xp;
+        y += 1;
+        if (y == y2) { break; }
 
     }
  next:
@@ -705,56 +705,56 @@ fill_tri(const tri *t, const cchar_t *wch)
     t1x = x2;
 
     if (dy1 > dx1) {   // swap values
-	SWAP(dy1, dx1);
-	changed1 = true;
+        SWAP(dy1, dx1);
+        changed1 = true;
     }
     else changed1 = false;
 
     e1 = (int)(dx1 >> 1);
 
     for (int i = 0; i <= dx1; i++) {
-	t1xp = 0; t2xp = 0;
-	if (t1x<t2x) { minx = t1x; maxx = t2x; }
-	else         { minx = t2x; maxx = t1x; }
-	// process first line until y value is about to change
-	while (i<dx1) {
-	    e1 += dy1;
-	    while (e1 >= dx1) {
-		e1 -= dx1;
-		if (changed1) { t1xp = signx1; break; }//t1x += signx1;
-		else          goto next3;
-	    }
-	    if (changed1) { break; }
-	    else   	  { t1x += signx1; }
-	    if (i<dx1)    { i++; }
-	}
+        t1xp = 0; t2xp = 0;
+        if (t1x<t2x) { minx = t1x; maxx = t2x; }
+        else         { minx = t2x; maxx = t1x; }
+        // process first line until y value is about to change
+        while (i<dx1) {
+            e1 += dy1;
+            while (e1 >= dx1) {
+                e1 -= dx1;
+                if (changed1) { t1xp = signx1; break; }//t1x += signx1;
+                else          goto next3;
+            }
+            if (changed1) { break; }
+            else             { t1x += signx1; }
+            if (i<dx1)    { i++; }
+        }
     next3:
-	// process second line until y value is about to change
-	while (t2x != x3) {
-	    e2 += dy2;
-	    while (e2 >= dx2) {
-		e2 -= dx2;
-		if (changed2) { t2xp = signx2; }
-		else          { goto next4; }
-	    }
-	    if (changed2)     { break; }
-	    else              { t2x += signx2; }
-	}
+        // process second line until y value is about to change
+        while (t2x != x3) {
+            e2 += dy2;
+            while (e2 >= dx2) {
+                e2 -= dx2;
+                if (changed2) { t2xp = signx2; }
+                else          { goto next4; }
+            }
+            if (changed2)     { break; }
+            else              { t2x += signx2; }
+        }
     next4:
 
-	if (minx>t1x) {minx = t1x;}
+        if (minx>t1x) {minx = t1x;}
         if (minx>t2x) {minx = t2x;}
-	if (maxx<t1x) {maxx = t1x;}
+        if (maxx<t1x) {maxx = t1x;}
         if (maxx<t2x) {maxx = t2x;}
         for(int i = minx; i <= maxx; i++) {
             mvadd_wch(y, i, wch);
         }
-	if (!changed1) { t1x += signx1; }
-	t1x += t1xp;
-	if (!changed2) { t2x += signx2; }
-	t2x += t2xp;
-	y += 1;
-	if (y>y3) { return; }
+        if (!changed1) { t1x += signx1; }
+        t1x += t1xp;
+        if (!changed2) { t2x += signx2; }
+        t2x += t2xp;
+        y += 1;
+        if (y>y3) { return; }
     }
 }
 
@@ -805,7 +805,7 @@ bool load_mesh(const char *path, mesh *m) {
     while(fgets(line, 80, fp) != NULL) {
         if(line[0] != 'v') { continue; }
 
-	vec4 v = {0.0f, 0.0f, 0.0f, 1.0f};
+        vec4 v = {0.0f, 0.0f, 0.0f, 1.0f};
         sscanf(line, "v %f %f %f", &v.x, &v.y, &v.z);
 
         if(vec_len + 1 >= vec_cap) {
@@ -872,7 +872,7 @@ z_cmp(const void *a, const void *b)
 short
 lum_to_pair(const float f)
 {
-	if (f < 0.0f) return 1;
-	if (f > 1.0f) return LEN(grays);
-	return 1 + (short)(f * LEN(grays) - 1);
+        if (f < 0.0f) return 1;
+        if (f > 1.0f) return LEN(grays);
+        return 1 + (short)(f * LEN(grays) - 1);
 }

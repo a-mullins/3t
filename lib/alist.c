@@ -163,6 +163,12 @@ alist_clear(struct alist *a, void (*destruct)(void *elem)) {
 ssize_t
 alist_in(struct alist *a, void *elem)
 {
+  /*
+   * FIXME might be better to crash if i > SSIZE_MAX, because that would
+   * mean elements have been stored that can't be retrieved. SSIZE_MAX is
+   * only guaranteed to be 32768, which is not very high when dealing with
+   * certain data sets.
+   */
     for (size_t i = 0; i<a->len; i++)
         if (memcmp(alist_get(a, i), elem, a->elem_size) == 0)
 	  return i <= SSIZE_MAX ? (ssize_t)i : -1;

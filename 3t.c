@@ -180,7 +180,7 @@ main(int argc, char **argv)
             // TODO we can calculate one world matrix and move it
             // outside of the for loop to drastically reduce the
             // number of calculations.
-               
+
             // we must use seperate vars for each input and output,
             // because mul_mat_vec assumes the input vector doesn't
             // change.
@@ -194,7 +194,7 @@ main(int argc, char **argv)
             tri rotated_zx;
             mul_mat_tri(&rot_x, &rotated_z, &rotated_zx);
 
-            // Translate away from camera.            
+            // Translate away from camera.
             tri translated;
             init_trans_mat(0, 0, m_p->radius * 1.7f, &trans);
             mul_mat_tri(&trans, &rotated_zx, &translated);
@@ -207,7 +207,7 @@ main(int argc, char **argv)
             /* TODO Use tri barycenter rather than first vertex? */
             vec4 cam_ray;
             sub_vec(&translated.p[0], &camera, &cam_ray);
-            
+
             if(mode == X_RAY || (dot_prod_vec4(&normal, &cam_ray) < 0.0f)) {
                 alist_push(tris_to_draw, &translated);
             }
@@ -215,7 +215,7 @@ main(int argc, char **argv)
 
         // Sort triangles by z-depth, so that ones farther away can be
         // drawn before closer ones.
-	alist_qsort(tris_to_draw, z_cmp);
+        alist_qsort(tris_to_draw, z_cmp);
         // qsort(tris_to_draw.buf,
         //       tris_to_draw.len,
         //       tris_to_draw.elem_size,
@@ -520,7 +520,7 @@ init_trans_mat(float x, float y, float z, mat4x4 *m)
     m->m[3][1] = y;
     m->m[3][2] = z;
 }
-    
+
 
 // -=[ RASTERIZING FUNCTIONS ]=------------------------------------------------
 // adapted from:

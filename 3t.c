@@ -21,12 +21,12 @@
 
 
 // -=[ STRUCTS / TYPES ]=------------------------------------------------------
-typedef struct vec4 {
+struct vec {
     float x, y, z, w;
-} vec4;
+};
 
 typedef struct tri {
-    vec4 p[3];
+    struct vec p[3];
 } tri;
 
 typedef struct mesh {
@@ -36,34 +36,34 @@ typedef struct mesh {
     float radius;
 } mesh;
 
-typedef struct mat4x4 {
+struct matrix {
     float m[4][4];
-} mat4x4;
+};
 
 
 // -=[ VECTOR AND MATRIX OPERATIONS ]=-----------------------------------------
 /* TODO rename as <noun>_<verb> */
-void mul_mat_vec(const mat4x4 *m, const vec4 *i, vec4 *o);
-void mul_mat_tri(const mat4x4 *m, const tri *t, tri *to);
-void add_vec(const vec4 *v1, const vec4 *v2, vec4 *vo);
-void sub_vec(const vec4 *v1, const vec4 *v2, vec4 *vo);
-void mul_scalar_vec(float f, const vec4 *v, vec4 *vo);
-void div_scalar_vec(float f, const vec4 *v, vec4 *vo);
-void add_tri_vec(const tri *t, const vec4 *v, tri *to);
+void mul_matrix_vec(const struct matrix *m, const struct vec *i, struct vec *o);
+void mul_matrix_tri(const struct matrix *m, const tri *t, tri *to);
+void add_vec(const struct vec *v1, const struct vec *v2, struct vec *vo);
+void sub_vec(const struct vec *v1, const struct vec *v2, struct vec *vo);
+void mul_scalar_vec(float f, const struct vec *v, struct vec *vo);
+void div_scalar_vec(float f, const struct vec *v, struct vec *vo);
+void add_tri_vec(const tri *t, const struct vec *v, tri *to);
 /* TODO Rename as tri_surface_normal */
-void normal_tri(const tri *t, vec4 *normal);
-void normalize_vec4(vec4 *v);
-float len_vec4(const vec4 *v);
-void cross_prod_vec4(const vec4 *v1, const vec4 *v2, vec4 *vo);
-float dot_prod_vec4(const vec4 *v1, const vec4 *v2);
+void normal_tri(const tri *t, struct vec *normal);
+void normalize_vec(struct vec *v);
+float len_vec(const struct vec *v);
+void cross_prod_vec(const struct vec *v1, const struct vec *v2, struct vec *vo);
+float dot_prod_vec(const struct vec *v1, const struct vec *v2);
 
 /* TODO I think camera matrix is the more common term than projection matrix? */
-void init_projection_mat(float fov_degrees, float aspect, float near,
-                         float far, mat4x4 *m);
-void init_rotx_mat(float theta, mat4x4 *m);
-void init_roty_mat(float theta, mat4x4 *m);
-void init_rotz_mat(float theta, mat4x4 *m);
-void init_trans_mat(float x, float y, float z, mat4x4 *m);
+void init_projection_matrix(float fov_degrees, float aspect, float near,
+                         float far, struct matrix *m);
+void init_rotx_matrix(float theta, struct matrix *m);
+void init_roty_matrix(float theta, struct matrix *m);
+void init_rotz_matrix(float theta, struct matrix *m);
+void init_trans_matrix(float x, float y, float z, struct matrix *m);
 
 
 // -=[ RASTERIZATION FUNCTIONS ]=----------------------------------------------
@@ -113,11 +113,11 @@ main(int argc, char **argv)
     float far = 1000.0f;
     float fov = 75.0f;
 
-    mat4x4 rot_z;
-    mat4x4 rot_x;
-    mat4x4 trans;
+    struct matrix rot_z;
+    struct matrix rot_x;
+    struct matrix trans;
 
-    vec4 camera = {0};
+    struct vec camera = {0};
 
     // Colors
     for (short i = 0; i < (short)LEN(grays); i++)
@@ -162,15 +162,15 @@ main(int argc, char **argv)
         // Transform needs to be recalculated in case the window size changes.
         // The coeff to the aspect ratio is to correct for the fact that
         // characters are typically taller than they are wide.
-        mat4x4 mat_proj;
-        init_projection_mat(fov, 2.0f * ((float)y_max / (float)x_max),
+        struct matrix mat_proj;
+        init_projection_matrix(fov, 2.0f * ((float)y_max / (float)x_max),
                             near, far, &mat_proj);
 
         float theta = (float)frame_cnt / 15.0f / (0.5f * M_PIf);
         /* theta = 0.0f; */
 
-        init_rotx_mat(theta, &rot_x);
-        init_rotz_mat(theta, &rot_z);
+        init_rotx_matrix(theta, &rot_x);
+        init_rotz_matrix(theta, &rot_z);
 
         // Cull.
         // Collect only the triangles we want to draw.
@@ -188,27 +188,27 @@ main(int argc, char **argv)
 
             // Rotate around z axis.
             tri rotated_z;
-            mul_mat_tri(&rot_z, &t, &rotated_z);
+            mul_matrix_tri(&rot_z, &t, &rotated_z);
 
             // Rotate around x axis.
             tri rotated_zx;
-            mul_mat_tri(&rot_x, &rotated_z, &rotated_zx);
+            mul_matrix_tri(&rot_x, &rotated_z, &rotated_zx);
 
             // Translate away from camera.
             tri translated;
-            init_trans_mat(0, 0, m_p->radius * 1.7f, &trans);
-            mul_mat_tri(&trans, &rotated_zx, &translated);
+            init_trans_matrix(0, 0, m_p->radius * 1.7f, &trans);
+            mul_matrix_tri(&trans, &rotated_zx, &translated);
 
             // Find triangle normal.
-            vec4 normal;
+            struct vec normal;
             normal_tri(&translated, &normal);
 
             // Should this face be drawn?
             /* TODO Use tri barycenter rather than first vertex? */
-            vec4 cam_ray;
+            struct vec cam_ray;
             sub_vec(&translated.p[0], &camera, &cam_ray);
 
-            if(mode == X_RAY || (dot_prod_vec4(&normal, &cam_ray) < 0.0f)) {
+            if(mode == X_RAY || (dot_prod_vec(&normal, &cam_ray) < 0.0f)) {
                 alist_push(tris_to_draw, &translated);
             }
         }
@@ -227,18 +227,18 @@ main(int argc, char **argv)
         // Draw the triangles.
         for(size_t i = 0; i < alist_len(tris_to_draw); i++) {
             tri t = *(tri *)alist_get(tris_to_draw, i);
-            vec4 normal;
+            struct vec normal;
             normal_tri(&t, &normal);
 
             // Light tris by global illumination.
-            vec4 light = { 0.5f, -0.5f, -1.0f, 0.0f };
-            normalize_vec4(&light);
-            float light_dp = dot_prod_vec4(&normal, &light);
+            struct vec light = { 0.5f, .75f, -1.0f, 0.0f };
+            normalize_vec(&light);
+            float light_dp = dot_prod_vec(&normal, &light);
 
             tri projected = {0};
             // Apply perspective transform to each point,
             // that is, project triangle from 3d into 2d.
-            mul_mat_tri(&mat_proj, &t, &projected);
+            mul_matrix_tri(&mat_proj, &t, &projected);
 
             // Each point has a range of -1 to +1, so it must be
             // scaled into screen space.
@@ -257,18 +257,18 @@ main(int argc, char **argv)
 
             // This step is to account for the fact that vector space's origin
             // is at the bottom left, and screen space is at the top left.
-            mat4x4 T_trans0 = {0}, T_reflect = {0}, T_trans1 = {0};
+            struct matrix T_trans0 = {0}, T_reflect = {0}, T_trans1 = {0};
             tri translated = {0}, reflected = {0};
-            init_trans_mat(0, -(float)y_max/2, 0, &T_trans0);
-            init_trans_mat(0, (float)y_max/2, 0, &T_trans1);
+            init_trans_matrix(0, -(float)y_max/2, 0, &T_trans0);
+            init_trans_matrix(0, (float)y_max/2, 0, &T_trans1);
             T_reflect.m[0][0] = 1;
             T_reflect.m[1][1] = -1;
             T_reflect.m[2][2] = 1;
             T_reflect.m[3][3] = 1;
 
-            mul_mat_tri(&T_trans0, &projected, &translated);
-            mul_mat_tri(&T_reflect, &translated, &reflected);
-            mul_mat_tri(&T_trans1, &reflected, &translated);
+            mul_matrix_tri(&T_trans0, &projected, &translated);
+            mul_matrix_tri(&T_reflect, &translated, &reflected);
+            mul_matrix_tri(&T_trans1, &reflected, &translated);
             projected = translated;
 
             // Finally, we get to draw 'pixels' to our screen.
@@ -330,10 +330,10 @@ cleanup:
 
 // -=[ VECTOR AND MATRIX OPERATIONS ]=-----------------------------------------
 void
-mul_mat_vec(const mat4x4 *m, const vec4 *i, vec4 *o)
+mul_matrix_vec(const struct matrix *m, const struct vec *i, struct vec *o)
 {
     float w;
-    /* TODO verify that this is correct for vec4. */
+    /* TODO verify that this is correct for struct vec. */
     o->x = i->x * m->m[0][0] + i->y * m->m[1][0] + i->z * m->m[2][0] + m->m[3][0];
     o->y = i->x * m->m[0][1] + i->y * m->m[1][1] + i->z * m->m[2][1] + m->m[3][1];
     o->z = i->x * m->m[0][2] + i->y * m->m[1][2] + i->z * m->m[2][2] + m->m[3][2];
@@ -350,16 +350,16 @@ mul_mat_vec(const mat4x4 *m, const vec4 *i, vec4 *o)
 // Multiply each vector of triangle `t` with matrix `m`.
 // This is useful for applying a transform to a triangle.
 void
-mul_mat_tri(const mat4x4 *m, const tri *t, tri *to)
+mul_matrix_tri(const struct matrix *m, const tri *t, tri *to)
 {
     for(short i = 0; i < 3; i++) {
-        mul_mat_vec(m, &t->p[i], &to->p[i]);
+        mul_matrix_vec(m, &t->p[i], &to->p[i]);
     }
 }
 
 
 void
-add_vec(const vec4 *v1, const vec4 *v2, vec4 *vo)
+add_vec(const struct vec *v1, const struct vec *v2, struct vec *vo)
 {
     vo->x = v1->x + v2->x;
     vo->y = v1->y + v2->y;
@@ -369,7 +369,7 @@ add_vec(const vec4 *v1, const vec4 *v2, vec4 *vo)
 
 
 void
-sub_vec(const vec4 *v1, const vec4 *v2, vec4 *vo)
+sub_vec(const struct vec *v1, const struct vec *v2, struct vec *vo)
 {
     vo->x = v1->x - v2->x;
     vo->y = v1->y - v2->y;
@@ -379,7 +379,7 @@ sub_vec(const vec4 *v1, const vec4 *v2, vec4 *vo)
 
 
 void
-mul_scalar_vec(float f, const vec4 *v, vec4 *vo)
+mul_scalar_vec(float f, const struct vec *v, struct vec *vo)
 {
     vo->x = v->x * f;
     vo->y = v->y * f;
@@ -389,7 +389,7 @@ mul_scalar_vec(float f, const vec4 *v, vec4 *vo)
 
 
 void
-div_scalar_vec(float f, const vec4 *v, vec4 *vo)
+div_scalar_vec(float f, const struct vec *v, struct vec *vo)
 {
     vo->x = v->x / f;
     vo->y = v->y / f;
@@ -400,7 +400,7 @@ div_scalar_vec(float f, const vec4 *v, vec4 *vo)
 
 // Add vector `v` to every vector in triangle `t`.
 void
-add_tri_vec(const tri *t, const vec4 *v, tri *to)
+add_tri_vec(const tri *t, const struct vec *v, tri *to)
 {
     /* TODO call add_vec instead */
     for(short i=0; i<3; i++) {
@@ -414,9 +414,9 @@ add_tri_vec(const tri *t, const vec4 *v, tri *to)
 
 // Calculate the face normal for triange `t`.
 void
-normal_tri(const tri *t, vec4 *normal) {
+normal_tri(const tri *t, struct vec *normal) {
     // Find triangle normal.
-    vec4 line0, line1;
+    struct vec line0, line1;
     sub_vec(&t->p[1], &t->p[0], &line0);
     sub_vec(&t->p[2], &t->p[0], &line1);
 
@@ -425,10 +425,10 @@ normal_tri(const tri *t, vec4 *normal) {
     normal->z = line0.x * line1.y - line0.y * line1.x;
 
     // Normalize the normal vector. :-)
-    normalize_vec4(normal);
+    normalize_vec(normal);
 }
 
-void normalize_vec4(vec4 *v) {
+void normalize_vec(struct vec *v) {
     /*
      * TODO be more specific about which 'normalization' operation this does,
      * since in graphics it can mean a number of different things.
@@ -439,37 +439,37 @@ void normalize_vec4(vec4 *v) {
      * ref: https://cs418.cs.illinois.edu/website/text/math2.html
      * (I have Lay on hand but they don't say much about this issue.)
      */
-    float l = len_vec4(v);
+    float l = len_vec(v);
     v->x /= l;
     v->y /= l;
     v->z /= l;
 }
 
-float len_vec4(const vec4 *v) {
+float len_vec(const struct vec *v) {
     /*
      * TODO which length operation do mean? here we are pretending it's a
      * Cartesian vector.
      */
-    return sqrtf(dot_prod_vec4(v, v));
+    return sqrtf(dot_prod_vec(v, v));
 }
 
-void cross_prod_vec4(const vec4 *v1, const vec4 *v2, vec4 *vo) {
+void cross_prod_vec(const struct vec *v1, const struct vec *v2, struct vec *vo) {
     /* TODO Account for w. Or don't. */
     vo->x = v1->y * v2->z - v1->z * v2->y;
     vo->y = v1->z * v2->x - v1->x * v2->z;
     vo->z = v1->x * v2->y - v1->y * v2->x;
 }
 
-float dot_prod_vec4(const vec4 *v1, const vec4 *v2) {
+float dot_prod_vec(const struct vec *v1, const struct vec *v2) {
     /* TODO Account for w. Or don't. */
     return v1->x*v2->x + v1->y*v2->y + v1->z*v2->z + v1->w*v2->w;
 }
 
 void
-init_projection_mat(float fov_degrees, float aspect, float near, float far,
-                    mat4x4 *m)
+init_projection_matrix(float fov_degrees, float aspect, float near, float far,
+                    struct matrix *m)
 {
-    memset(m, (int)0.0f, sizeof (mat4x4));
+    memset(m, (int)0.0f, sizeof (struct matrix));
     float fov_rad = 1.0f / tanf(fov_degrees * 0.5f / 180.0f * M_PIf);
     m->m[0][0] = aspect * fov_rad;
     m->m[1][1] = fov_rad;
@@ -479,9 +479,9 @@ init_projection_mat(float fov_degrees, float aspect, float near, float far,
 }
 
 void
-init_rotx_mat(float theta, mat4x4 *m)
+init_rotx_matrix(float theta, struct matrix *m)
 {
-    memset(m, (int)0.0f, sizeof (mat4x4));
+    memset(m, (int)0.0f, sizeof (struct matrix));
     m->m[0][0] = 1;
     m->m[1][1] = cosf(theta * 0.5f);
     m->m[1][2] = sinf(theta * 0.5f);
@@ -491,17 +491,17 @@ init_rotx_mat(float theta, mat4x4 *m)
 }
 
 void
-init_roty_mat(float theta, mat4x4 *m)
+init_roty_matrix(float theta, struct matrix *m)
 {
     /* STUB */
-    memset(m, (int)0.0f, sizeof (mat4x4));
+    memset(m, (int)0.0f, sizeof (struct matrix));
     (void)theta; (void)m;
 }
 
 void
-init_rotz_mat(float theta, mat4x4 *m)
+init_rotz_matrix(float theta, struct matrix *m)
 {
-    memset(m, (int)0.0f, sizeof (mat4x4));
+    memset(m, (int)0.0f, sizeof (struct matrix));
     m->m[0][0] = cosf(theta);
     m->m[0][1] = sinf(theta);
     m->m[1][0] = -sinf(theta);
@@ -511,9 +511,9 @@ init_rotz_mat(float theta, mat4x4 *m)
 }
 
 void
-init_trans_mat(float x, float y, float z, mat4x4 *m)
+init_trans_matrix(float x, float y, float z, struct matrix *m)
 {
-    memset(m, (int)0.0f, sizeof (mat4x4));
+    memset(m, (int)0.0f, sizeof (struct matrix));
     for (int i = 0; i < 3; i++)
         m->m[i][i] = 1.0f;
     m->m[3][0] = x;
@@ -810,7 +810,7 @@ bool load_mesh(const char *path, mesh *m) {
 
     size_t vec_cap = 16;
     size_t vec_len = 0;
-    vec4 *vecs = calloc(vec_cap, sizeof (vec4));
+    struct vec *vecs = calloc(vec_cap, sizeof (struct vec));
 
     char line[80];
 
@@ -818,12 +818,12 @@ bool load_mesh(const char *path, mesh *m) {
     while(fgets(line, 80, fp) != NULL) {
         if(line[0] != 'v') { continue; }
 
-        vec4 v = {0.0f, 0.0f, 0.0f, 1.0f};
+        struct vec v = {0.0f, 0.0f, 0.0f, 1.0f};
         sscanf(line, "v %f %f %f", &v.x, &v.y, &v.z);
 
         if(vec_len + 1 >= vec_cap) {
             vec_cap <<= 1;
-            vecs = realloc(vecs, vec_cap * sizeof (vec4));
+            vecs = realloc(vecs, vec_cap * sizeof (struct vec));
         }
         *(vecs + vec_len) = v;
         vec_len++;

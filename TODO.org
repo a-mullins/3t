@@ -1,9 +1,6 @@
 #+STARTUP: content indent
-* TODO Refactor vec4 -> vec, mat4x4 -> mat
-We will only be manipulating homogenous vectors and their transforms, there will be no other vector or matrix sizes in the foreseeable future.
 * TODO Refactor from row-vects to col-vects.
 It is confusing. Most of the literature assumes column vectors, but javid is using row vectors.
-* TODO Refactor darray -> alist.
 * TODO Refactor functions to <noun>_<verb> for better sorting.
 * TODO Implement view frustum clipping/culling to fix artifacting.
 Whenever a triangle protrudes through the viewing plane it causes artifacting. Presumably this is because we do not ensure that the triangle is inside the viewing frustum before drawing it.
@@ -17,6 +14,9 @@ Bresenham's and scanline for polys? Could maybe support quads with a co-planarit
 * TODO [#C] Use lex/yacc to write a proper parser for OBJ files.
 * ~TODO [#C] Support non-unicode modes.~
 * ~TODO Make darray lib header-only in the style of queue.h~
+* DONE Refactor vec4 -> vec, mat4x4 -> mat
+We will only be manipulating homogenous vectors and their transforms, there will be no other vector or matrix sizes in the foreseeable future.
+* DONE Refactor darray -> alist.
 * DONE Rewrite draw_line using Bresenham's algorithm.
 * DONE Why does it crash if LANG is banana?!
 setlocale() return NULL, which was then dereferenced. Oops.

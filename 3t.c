@@ -29,12 +29,12 @@ typedef struct tri {
     struct vec p[3];
 } tri;
 
-typedef struct mesh {
+struct mesh {
     char name[32];
     tri *tris;
     int len;
     float radius;
-} mesh;
+};
 
 struct matrix {
     float m[4][4];
@@ -74,7 +74,7 @@ void fill_tri(const tri *t, const cchar_t *wch);
 
 // -=[ UTILITY FUNCTIONS ]=----------------------------------------------------
 void ncurses_startup();
-bool load_mesh(const char *path, mesh *m);
+bool load_mesh(const char *path, struct mesh *m);
 int z_cmp(const void *a, const void *b);
 short lum_to_pair(const float f);
 
@@ -94,10 +94,10 @@ main(int argc, char **argv)
         return 1;
     }
 
-    struct alist *meshes = alist_new(sizeof (mesh));
+    struct alist *meshes = alist_new(sizeof (struct mesh));
     size_t mesh_i = 0;
     for (int i = 1; i < argc && i < 8; i++) {
-        mesh m = {0};
+        struct mesh m = {0};
         if (load_mesh(argv[i], &m) == false) {
             fprintf(stderr, "%s: error loading mesh at \"%s\"\n",
                 argv[0], argv[i]);
@@ -157,7 +157,7 @@ main(int argc, char **argv)
             }
         }
 
-        mesh *m_p = alist_get(meshes, mesh_i);
+        struct mesh *m_p = alist_get(meshes, mesh_i);
 
         // Transform needs to be recalculated in case the window size changes.
         // The coeff to the aspect ratio is to correct for the fact that
@@ -790,7 +790,7 @@ ncurses_startup()
 }
 
 
-bool load_mesh(const char *path, mesh *m) {
+bool load_mesh(const char *path, struct mesh *m) {
     /* Does path exist and can it be read? */
     if (access(path, R_OK) != 0)
         return false;

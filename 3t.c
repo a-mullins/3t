@@ -1,14 +1,15 @@
 #define NCURSES_WIDECHAR 1
 #include <locale.h>
-#include <math.h>    // for sinf(), cosf(), tanf()
+#include <math.h>     // for sinf(), cosf(), tanf()
 #include <ncurses.h>
 #include <stdbool.h>
-#include <stdio.h>   // fopen, fprintf, etc
-#include <stdlib.h>  // for abs()
-#include <string.h>  // memcpy()
+#include <stdio.h>    // fopen, fprintf, etc
+#include <stdlib.h>   // for abs()
+#include <string.h>   // memcpy()
 #include <time.h>
-#include <unistd.h>  // for usleep()
-#include <wchar.h>   // for wint_t, wchar_t, etc.
+#include <unistd.h>   // for access(), usleep()
+#include <wchar.h>    // for wint_t, wchar_t, etc.
+#include <sys/stat.h> // struct stat, stat()
 #include "alist.h"
 
 
@@ -97,7 +98,11 @@ main(int argc, char **argv)
     size_t mesh_i = 0;
     for (int i = 1; i < argc && i < 8; i++) {
         mesh m = {0};
-        load_mesh(argv[i], &m);
+        if (load_mesh(argv[i], &m) == false) {
+            fprintf(stderr, "%s: error loading mesh at \"%s\"\n",
+                argv[0], argv[i]);
+            return 1;
+        }
         alist_push(meshes, &m);
     }
 
@@ -126,7 +131,7 @@ main(int argc, char **argv)
 
     typedef enum render_mode {WIREFRAME, X_RAY, SHADED, OUTLINED, NUM} render_mode;
     char *render_mode_str[NUM] = {"wireframe", "x-ray", "shaded", "outlined"};
-    render_mode mode = WIREFRAME;
+    render_mode mode = SHADED;
 
     // MAIN LOOP
     while( 1 ) {
@@ -786,11 +791,20 @@ ncurses_startup()
 
 
 bool load_mesh(const char *path, mesh *m) {
-    FILE *fp = fopen(path, "r");
-    if(fp == NULL) {
-        fprintf(stderr, "couldn't open %s", path);
+    /* Does path exist and can it be read? */
+    if (access(path, R_OK) != 0)
         return false;
-    }
+
+    /* Is it a regular file? */
+    struct stat sb;
+    stat(path, &sb);
+    if (!S_ISREG(sb.st_mode))
+        return false;
+
+    /* fopen still might fail for a number of reasons. */
+    FILE *fp = fopen(path, "r");
+    if (fp == NULL)
+        return false;
 
     float radius = 0.0f;
 

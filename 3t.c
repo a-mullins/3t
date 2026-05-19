@@ -259,8 +259,8 @@ main(int argc, char **argv)
             // is at the bottom left, and screen space is at the top left.
             mat4x4 T_trans0 = {0}, T_reflect = {0}, T_trans1 = {0};
             tri translated = {0}, reflected = {0};
-            init_trans_mat(0, -y_max/2, 0, &T_trans0);
-            init_trans_mat(0, y_max/2, 0, &T_trans1);
+            init_trans_mat(0, -(float)y_max/2, 0, &T_trans0);
+            init_trans_mat(0, (float)y_max/2, 0, &T_trans1);
             T_reflect.m[0][0] = 1;
             T_reflect.m[1][1] = -1;
             T_reflect.m[2][2] = 1;

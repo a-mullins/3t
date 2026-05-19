@@ -22,11 +22,17 @@
 
 // -=[ STRUCTS / TYPES ]=------------------------------------------------------
 struct vec {
-    float x, y, z, w;
+    union {
+        struct { float x, y, z, w; };
+        float xs[4];
+    };
 };
 
 struct tri {
-    struct vec v[3];
+    union {
+        struct { struct vec v0; struct vec v1; struct vec v3; };
+        struct vec v[3];
+    };
 };
 
 struct mesh {
@@ -230,7 +236,7 @@ main(int argc, char **argv)
             normal_tri(&t, &normal);
 
             // Light tris by global illumination.
-            struct vec light = { 0.5f, .75f, -1.0f, 0.0f };
+            struct vec light = { .xs = {0.5f, .75f, -1.0f, 0.0f} };
             normalize_vec(&light);
             float light_dp = dot_prod_vec(&normal, &light);
 
@@ -817,7 +823,7 @@ bool load_mesh(const char *path, struct mesh *m) {
     while(fgets(line, 80, fp) != NULL) {
         if(line[0] != 'v') { continue; }
 
-        struct vec v = {0.0f, 0.0f, 0.0f, 1.0f};
+        struct vec v = { .xs = {0.0f, 0.0f, 0.0f, 1.0f}};
         sscanf(line, "v %f %f %f", &v.x, &v.y, &v.z);
 
         if(vec_len + 1 >= vec_cap) {

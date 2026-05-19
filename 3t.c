@@ -25,13 +25,13 @@ struct vec {
     float x, y, z, w;
 };
 
-typedef struct tri {
+struct tri {
     struct vec p[3];
-} tri;
+};
 
 struct mesh {
     char name[32];
-    tri *tris;
+    struct tri *tris;
     int len;
     float radius;
 };
@@ -44,14 +44,14 @@ struct matrix {
 // -=[ VECTOR AND MATRIX OPERATIONS ]=-----------------------------------------
 /* TODO rename as <noun>_<verb> */
 void mul_matrix_vec(const struct matrix *m, const struct vec *i, struct vec *o);
-void mul_matrix_tri(const struct matrix *m, const tri *t, tri *to);
+void mul_matrix_tri(const struct matrix *m, const struct tri *t, struct tri *to);
 void add_vec(const struct vec *v1, const struct vec *v2, struct vec *vo);
 void sub_vec(const struct vec *v1, const struct vec *v2, struct vec *vo);
 void mul_scalar_vec(float f, const struct vec *v, struct vec *vo);
 void div_scalar_vec(float f, const struct vec *v, struct vec *vo);
-void add_tri_vec(const tri *t, const struct vec *v, tri *to);
+void add_tri_vec(const struct tri *t, const struct vec *v, struct tri *to);
 /* TODO Rename as tri_surface_normal */
-void normal_tri(const tri *t, struct vec *normal);
+void normal_tri(const struct tri *t, struct vec *normal);
 void normalize_vec(struct vec *v);
 float len_vec(const struct vec *v);
 void cross_prod_vec(const struct vec *v1, const struct vec *v2, struct vec *vo);
@@ -68,8 +68,8 @@ void init_trans_matrix(float x, float y, float z, struct matrix *m);
 
 // -=[ RASTERIZATION FUNCTIONS ]=----------------------------------------------
 void draw_line(int x1, int y1, int x2, int y2, const cchar_t *wch);
-void draw_tri(const tri *t, const cchar_t *wch);
-void fill_tri(const tri *t, const cchar_t *wch);
+void draw_tri(const struct tri *t, const cchar_t *wch);
+void fill_tri(const struct tri *t, const cchar_t *wch);
 
 
 // -=[ UTILITY FUNCTIONS ]=----------------------------------------------------
@@ -127,7 +127,7 @@ main(int argc, char **argv)
     getmaxyx(stdscr, y_max, x_max);
     unsigned long long frame_cnt = 0;
     //float target_fps = 15;
-    struct alist *tris_to_draw = alist_new(sizeof (tri));
+    struct alist *tris_to_draw = alist_new(sizeof (struct tri));
 
     typedef enum render_mode {WIREFRAME, X_RAY, SHADED, OUTLINED, NUM} render_mode;
     char *render_mode_str[NUM] = {"wireframe", "x-ray", "shaded", "outlined"};
@@ -184,18 +184,18 @@ main(int argc, char **argv)
             // we must use seperate vars for each input and output,
             // because mul_mat_vec assumes the input vector doesn't
             // change.
-            tri t = *(m_p->tris + i);
+            struct tri t = *(m_p->tris + i);
 
             // Rotate around z axis.
-            tri rotated_z;
+            struct tri rotated_z;
             mul_matrix_tri(&rot_z, &t, &rotated_z);
 
             // Rotate around x axis.
-            tri rotated_zx;
+            struct tri rotated_zx;
             mul_matrix_tri(&rot_x, &rotated_z, &rotated_zx);
 
             // Translate away from camera.
-            tri translated;
+            struct tri translated;
             init_trans_matrix(0, 0, m_p->radius * 1.7f, &trans);
             mul_matrix_tri(&trans, &rotated_zx, &translated);
 
@@ -204,7 +204,6 @@ main(int argc, char **argv)
             normal_tri(&translated, &normal);
 
             // Should this face be drawn?
-            /* TODO Use tri barycenter rather than first vertex? */
             struct vec cam_ray;
             sub_vec(&translated.p[0], &camera, &cam_ray);
 
@@ -226,7 +225,7 @@ main(int argc, char **argv)
 
         // Draw the triangles.
         for(size_t i = 0; i < alist_len(tris_to_draw); i++) {
-            tri t = *(tri *)alist_get(tris_to_draw, i);
+            struct tri t = *(struct tri *)alist_get(tris_to_draw, i);
             struct vec normal;
             normal_tri(&t, &normal);
 
@@ -235,7 +234,7 @@ main(int argc, char **argv)
             normalize_vec(&light);
             float light_dp = dot_prod_vec(&normal, &light);
 
-            tri projected = {0};
+            struct tri projected = {0};
             // Apply perspective transform to each point,
             // that is, project triangle from 3d into 2d.
             mul_matrix_tri(&mat_proj, &t, &projected);
@@ -258,7 +257,7 @@ main(int argc, char **argv)
             // This step is to account for the fact that vector space's origin
             // is at the bottom left, and screen space is at the top left.
             struct matrix T_trans0 = {0}, T_reflect = {0}, T_trans1 = {0};
-            tri translated = {0}, reflected = {0};
+            struct tri translated = {0}, reflected = {0};
             init_trans_matrix(0, -(float)y_max/2, 0, &T_trans0);
             init_trans_matrix(0, (float)y_max/2, 0, &T_trans1);
             T_reflect.m[0][0] = 1;
@@ -350,7 +349,7 @@ mul_matrix_vec(const struct matrix *m, const struct vec *i, struct vec *o)
 // Multiply each vector of triangle `t` with matrix `m`.
 // This is useful for applying a transform to a triangle.
 void
-mul_matrix_tri(const struct matrix *m, const tri *t, tri *to)
+mul_matrix_tri(const struct matrix *m, const struct tri *t, struct tri *to)
 {
     for(short i = 0; i < 3; i++) {
         mul_matrix_vec(m, &t->p[i], &to->p[i]);
@@ -400,7 +399,7 @@ div_scalar_vec(float f, const struct vec *v, struct vec *vo)
 
 // Add vector `v` to every vector in triangle `t`.
 void
-add_tri_vec(const tri *t, const struct vec *v, tri *to)
+add_tri_vec(const struct tri *t, const struct vec *v, struct tri *to)
 {
     /* TODO call add_vec instead */
     for(short i=0; i<3; i++) {
@@ -414,7 +413,7 @@ add_tri_vec(const tri *t, const struct vec *v, tri *to)
 
 // Calculate the face normal for triange `t`.
 void
-normal_tri(const tri *t, struct vec *normal) {
+normal_tri(const struct tri *t, struct vec *normal) {
     // Find triangle normal.
     struct vec line0, line1;
     sub_vec(&t->p[1], &t->p[0], &line0);
@@ -590,7 +589,7 @@ draw_line(int x1, int y1, int x2, int y2, const cchar_t *wch)
 
 
 void
-draw_tri(const tri *t, const cchar_t *wch)
+draw_tri(const struct tri *t, const cchar_t *wch)
 {
     draw_line((int)t->p[0].x, (int)t->p[0].y, (int)t->p[1].x, (int)t->p[1].y, wch);
     draw_line((int)t->p[1].x, (int)t->p[1].y, (int)t->p[2].x, (int)t->p[2].y, wch);
@@ -603,7 +602,7 @@ draw_tri(const tri *t, const cchar_t *wch)
 //   https://www.avrfreaks.net/sites/default/files/triangles.c
 //   (dead link)
 void
-fill_tri(const tri *t, const cchar_t *wch)
+fill_tri(const struct tri *t, const cchar_t *wch)
 {
     int x1 = (int)t->p[0].x;
     int x2 = (int)t->p[1].x;
@@ -837,10 +836,10 @@ bool load_mesh(const char *path, struct mesh *m) {
 
     size_t tri_cap = 16;
     size_t tri_len = 0;
-    tri *tris = calloc(tri_cap, sizeof (tri));
+    struct tri *tris = calloc(tri_cap, sizeof (struct tri));
 
     // Scan for faces.
-    tri t;
+    struct tri t;
     int i_x, i_y, i_z;
     while(fgets(line, 80, fp) != NULL) {
         if(line[0] != 'f') { continue; }
@@ -852,18 +851,18 @@ bool load_mesh(const char *path, struct mesh *m) {
 
         if(tri_len + 1 >= tri_cap) {
             tri_cap <<= 1;
-            tris = realloc(tris, tri_cap * sizeof (tri));
+            tris = realloc(tris, tri_cap * sizeof (struct tri));
         }
 
         *(tris + tri_len) = t;
         tri_len++;
     }
 
-    m->tris = calloc(tri_len, sizeof (tri));
+    m->tris = calloc(tri_len, sizeof (struct tri));
     m->len = (int)tri_len;
     strncpy(m->name, path, 32);
     m->radius = radius;
-    memcpy(m->tris, tris, tri_len * sizeof (tri));
+    memcpy(m->tris, tris, tri_len * sizeof (struct tri));
 
     return true;
 }
@@ -871,8 +870,8 @@ bool load_mesh(const char *path, struct mesh *m) {
 int
 z_cmp(const void *a, const void *b)
 {
-    tri t1 = *(tri *)a;
-    tri t2 = *(tri *)b;
+    struct tri t1 = *(struct tri *)a;
+    struct tri t2 = *(struct tri *)b;
 
     float t1_z_mid = (t1.p[0].z + t1.p[1].z + t1.p[2].z) / 3.0f;
     float t2_z_mid = (t2.p[0].z + t2.p[1].z + t2.p[2].z) / 3.0f;

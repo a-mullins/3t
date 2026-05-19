@@ -101,7 +101,6 @@ main(int argc, char **argv)
         alist_push(meshes, &m);
     }
 
-    getchar();
     ncurses_startup();
 
     // Needed for the perspective transform.

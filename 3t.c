@@ -26,7 +26,7 @@ struct vec {
 };
 
 struct tri {
-    struct vec p[3];
+    struct vec v[3];
 };
 
 struct mesh {
@@ -205,7 +205,7 @@ main(int argc, char **argv)
 
             // Should this face be drawn?
             struct vec cam_ray;
-            sub_vec(&translated.p[0], &camera, &cam_ray);
+            sub_vec(&translated.v[0], &camera, &cam_ray);
 
             if(mode == X_RAY || (dot_prod_vec(&normal, &cam_ray) < 0.0f)) {
                 alist_push(tris_to_draw, &translated);
@@ -241,18 +241,18 @@ main(int argc, char **argv)
 
             // Each point has a range of -1 to +1, so it must be
             // scaled into screen space.
-            projected.p[0].x += 1.0f; projected.p[0].y += 1.0f;
-            projected.p[1].x += 1.0f; projected.p[1].y += 1.0f;
-            projected.p[2].x += 1.0f; projected.p[2].y += 1.0f;
+            projected.v[0].x += 1.0f; projected.v[0].y += 1.0f;
+            projected.v[1].x += 1.0f; projected.v[1].y += 1.0f;
+            projected.v[2].x += 1.0f; projected.v[2].y += 1.0f;
 
             // This could be collapsed by using a 3x1 transform
             // and scalar multiply.
-            projected.p[0].x *= 0.5f * (float)x_max;
-            projected.p[0].y *= 0.5f * (float)y_max;
-            projected.p[1].x *= 0.5f * (float)x_max;
-            projected.p[1].y *= 0.5f * (float)y_max;
-            projected.p[2].x *= 0.5f * (float)x_max;
-            projected.p[2].y *= 0.5f * (float)y_max;
+            projected.v[0].x *= 0.5f * (float)x_max;
+            projected.v[0].y *= 0.5f * (float)y_max;
+            projected.v[1].x *= 0.5f * (float)x_max;
+            projected.v[1].y *= 0.5f * (float)y_max;
+            projected.v[2].x *= 0.5f * (float)x_max;
+            projected.v[2].y *= 0.5f * (float)y_max;
 
             // This step is to account for the fact that vector space's origin
             // is at the bottom left, and screen space is at the top left.
@@ -352,7 +352,7 @@ void
 mul_matrix_tri(const struct matrix *m, const struct tri *t, struct tri *to)
 {
     for(short i = 0; i < 3; i++) {
-        mul_matrix_vec(m, &t->p[i], &to->p[i]);
+        mul_matrix_vec(m, &t->v[i], &to->v[i]);
     }
 }
 
@@ -403,10 +403,10 @@ add_tri_vec(const struct tri *t, const struct vec *v, struct tri *to)
 {
     /* TODO call add_vec instead */
     for(short i=0; i<3; i++) {
-        to->p[i].x = t->p[i].x + v->x;
-        to->p[i].y = t->p[i].y + v->y;
-        to->p[i].z = t->p[i].z + v->z;
-        to->p[i].w = t->p[i].w + v->w;
+        to->v[i].x = t->v[i].x + v->x;
+        to->v[i].y = t->v[i].y + v->y;
+        to->v[i].z = t->v[i].z + v->z;
+        to->v[i].w = t->v[i].w + v->w;
     }
 }
 
@@ -416,8 +416,8 @@ void
 normal_tri(const struct tri *t, struct vec *normal) {
     // Find triangle normal.
     struct vec line0, line1;
-    sub_vec(&t->p[1], &t->p[0], &line0);
-    sub_vec(&t->p[2], &t->p[0], &line1);
+    sub_vec(&t->v[1], &t->v[0], &line0);
+    sub_vec(&t->v[2], &t->v[0], &line1);
 
     normal->x = line0.y * line1.z - line0.z * line1.y;
     normal->y = line0.z * line1.x - line0.x * line1.z;
@@ -591,9 +591,9 @@ draw_line(int x1, int y1, int x2, int y2, const cchar_t *wch)
 void
 draw_tri(const struct tri *t, const cchar_t *wch)
 {
-    draw_line((int)t->p[0].x, (int)t->p[0].y, (int)t->p[1].x, (int)t->p[1].y, wch);
-    draw_line((int)t->p[1].x, (int)t->p[1].y, (int)t->p[2].x, (int)t->p[2].y, wch);
-    draw_line((int)t->p[2].x, (int)t->p[2].y, (int)t->p[0].x, (int)t->p[0].y, wch);
+    draw_line((int)t->v[0].x, (int)t->v[0].y, (int)t->v[1].x, (int)t->v[1].y, wch);
+    draw_line((int)t->v[1].x, (int)t->v[1].y, (int)t->v[2].x, (int)t->v[2].y, wch);
+    draw_line((int)t->v[2].x, (int)t->v[2].y, (int)t->v[0].x, (int)t->v[0].y, wch);
 }
 
 // adapted from:
@@ -604,13 +604,13 @@ draw_tri(const struct tri *t, const cchar_t *wch)
 void
 fill_tri(const struct tri *t, const cchar_t *wch)
 {
-    int x1 = (int)t->p[0].x;
-    int x2 = (int)t->p[1].x;
-    int x3 = (int)t->p[2].x;
+    int x1 = (int)t->v[0].x;
+    int x2 = (int)t->v[1].x;
+    int x3 = (int)t->v[2].x;
 
-    int y1 = (int)t->p[0].y;
-    int y2 = (int)t->p[1].y;
-    int y3 = (int)t->p[2].y;
+    int y1 = (int)t->v[0].y;
+    int y2 = (int)t->v[1].y;
+    int y3 = (int)t->v[2].y;
 
     int t1x, t2x, y, minx, maxx, t1xp, t2xp;
     bool changed1 = false;
@@ -845,9 +845,9 @@ bool load_mesh(const char *path, struct mesh *m) {
         if(line[0] != 'f') { continue; }
 
         sscanf(line, "f %d %d %d", &i_x, &i_y, &i_z);
-        t.p[0] = *(vecs + i_x - 1);
-        t.p[1] = *(vecs + i_y - 1);
-        t.p[2] = *(vecs + i_z - 1);
+        t.v[0] = *(vecs + i_x - 1);
+        t.v[1] = *(vecs + i_y - 1);
+        t.v[2] = *(vecs + i_z - 1);
 
         if(tri_len + 1 >= tri_cap) {
             tri_cap <<= 1;
@@ -873,8 +873,8 @@ z_cmp(const void *a, const void *b)
     struct tri t1 = *(struct tri *)a;
     struct tri t2 = *(struct tri *)b;
 
-    float t1_z_mid = (t1.p[0].z + t1.p[1].z + t1.p[2].z) / 3.0f;
-    float t2_z_mid = (t2.p[0].z + t2.p[1].z + t2.p[2].z) / 3.0f;
+    float t1_z_mid = (t1.v[0].z + t1.v[1].z + t1.v[2].z) / 3.0f;
+    float t2_z_mid = (t2.v[0].z + t2.v[1].z + t2.v[2].z) / 3.0f;
 
     if(t1_z_mid < t2_z_mid) return  1;
     if(t1_z_mid > t2_z_mid) return -1;

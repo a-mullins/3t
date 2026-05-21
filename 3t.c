@@ -70,7 +70,8 @@ void init_rotx_matrix(float theta, struct matrix *m);
 void init_roty_matrix(float theta, struct matrix *m);
 void init_rotz_matrix(float theta, struct matrix *m);
 void init_trans_matrix(float x, float y, float z, struct matrix *m);
-
+void init_reflection_matrix(bool x, bool y, bool z, struct matrix *m);
+void init_id_matrix(struct matrix *m);
 
 // -=[ RASTERIZATION FUNCTIONS ]=----------------------------------------------
 void line_draw(int x1, int y1, int x2, int y2, const cchar_t *wch);
@@ -140,7 +141,7 @@ main(int argc, char **argv)
     render_mode mode = SHADED;
 
     // MAIN LOOP
-    while( 1 ) {
+    for( ;; ) {
         getmaxyx(stdscr, y_max, x_max);
 
         int key_pressed = 0;
@@ -151,8 +152,6 @@ main(int argc, char **argv)
                 break;
             case 'm':
                 mode = (mode + 1) % NUM;
-                if (COLORS < 256) /* TODO temp hack for linux console */
-                    mode = WIREFRAME;
                 break;
             case KEY_RIGHT:
                 mesh_i = (mesh_i + 1) % alist_len(meshes);
@@ -221,10 +220,6 @@ main(int argc, char **argv)
         // Sort triangles by z-depth, so that ones farther away can be
         // drawn before closer ones.
         alist_qsort(tris_to_draw, z_cmp);
-        // qsort(tris_to_draw.buf,
-        //       tris_to_draw.len,
-        //       tris_to_draw.elem_size,
-        //       z_cmp);
 
         // Clear screen before we draw.
         erase();
@@ -240,25 +235,34 @@ main(int argc, char **argv)
             vec_normalize(&light);
             float light_dp = vec_dot_prod(&normal, &light);
 
-            struct tri projected = {0};
+            struct tri projected;
             // Apply perspective transform to each point,
             // that is, project triangle from 3d into 2d.
             matrix_tri_mul(&mat_proj, &t, &projected);
 
             // Each point has a range of -1 to +1, so it must be
             // scaled into screen space.
-            projected.v[0].x += 1.0f; projected.v[0].y += 1.0f;
-            projected.v[1].x += 1.0f; projected.v[1].y += 1.0f;
-            projected.v[2].x += 1.0f; projected.v[2].y += 1.0f;
+            struct vec offset = { .xs = {1.0f, 1.0f, 0.0f, 0.0f}};
+            struct tri shifted;
+            tri_vec_add(&projected, &offset, &shifted);
+            // projected.v[0].x += 1.0f; projected.v[0].y += 1.0f;
+            // projected.v[1].x += 1.0f; projected.v[1].y += 1.0f;
+            // projected.v[2].x += 1.0f; projected.v[2].y += 1.0f;
 
             // This could be collapsed by using a 3x1 transform
             // and scalar multiply.
-            projected.v[0].x *= 0.5f * (float)x_max;
-            projected.v[0].y *= 0.5f * (float)y_max;
-            projected.v[1].x *= 0.5f * (float)x_max;
-            projected.v[1].y *= 0.5f * (float)y_max;
-            projected.v[2].x *= 0.5f * (float)x_max;
-            projected.v[2].y *= 0.5f * (float)y_max;
+            struct matrix T_scaler;
+            struct tri scaled;
+            init_id_matrix(&T_scaler);
+            T_scaler.m[0][0] = 0.5f * (float)x_max;
+            T_scaler.m[1][1] = 0.5f * (float)y_max;
+            matrix_tri_mul(&T_scaler, &shifted, &scaled);
+            // shifted.v[0].x *= 0.5f * (float)x_max;
+            // shifted.v[0].y *= 0.5f * (float)y_max;
+            // shifted.v[1].x *= 0.5f * (float)x_max;
+            // shifted.v[1].y *= 0.5f * (float)y_max;
+            // shifted.v[2].x *= 0.5f * (float)x_max;
+            // shifted.v[2].y *= 0.5f * (float)y_max;
 
             // This step is to account for the fact that vector space's origin
             // is at the bottom left, and screen space is at the top left.
@@ -266,15 +270,15 @@ main(int argc, char **argv)
             struct tri translated = {0}, reflected = {0};
             init_trans_matrix(0, -(float)y_max/2, 0, &T_trans0);
             init_trans_matrix(0, (float)y_max/2, 0, &T_trans1);
-            T_reflect.m[0][0] = 1;
-            T_reflect.m[1][1] = -1;
-            T_reflect.m[2][2] = 1;
-            T_reflect.m[3][3] = 1;
+            init_reflection_matrix(false, true, false, &T_reflect);
+            // T_reflect.m[0][0] = 1;
+            // T_reflect.m[1][1] = -1;
+            // T_reflect.m[2][2] = 1;
+            // T_reflect.m[3][3] = 1;
 
-            matrix_tri_mul(&T_trans0, &projected, &translated);
+            matrix_tri_mul(&T_trans0, &scaled, &translated);
             matrix_tri_mul(&T_reflect, &translated, &reflected);
             matrix_tri_mul(&T_trans1, &reflected, &translated);
-            projected = translated;
 
             // Finally, we get to draw 'pixels' to our screen.
             cchar_t wch;
@@ -282,25 +286,25 @@ main(int argc, char **argv)
                 // attr_set(A_NORMAL, lum_to_pair(light_dp), NULL);
                 setcchar(&wch, L"\u2588", A_NORMAL,
                          lum_to_pair(light_dp), NULL);
-                tri_fill(&projected, &wch);
+                tri_fill(&translated, &wch);
             }
             if (mode == OUTLINED) {
                 setcchar(&wch, L"\u2588", A_NORMAL,
                          lum_to_pair(light_dp), NULL);
-                tri_fill(&projected, &wch);
+                tri_fill(&translated, &wch);
                 setcchar(&wch, L"\u2588", A_NORMAL,
                          lum_to_pair(light_dp * 0.34f), NULL);
-                tri_draw(&projected, &wch);
+                tri_draw(&translated, &wch);
             }
             if (mode == WIREFRAME) {
                 setcchar(&wch, L"\u2588", A_NORMAL, 0, NULL);
-                tri_draw(&projected, &wch);
+                tri_draw(&translated, &wch);
             }
             if (mode == X_RAY) {
                 setcchar(&wch, L"\u2588", A_NORMAL,
                          lum_to_pair(light_dp < 0.15f ? 0.15f : light_dp),
                          NULL);
-                tri_draw(&projected, &wch);
+                tri_draw(&translated, &wch);
             }
         }
         attr_set(A_NORMAL, 0, NULL);
@@ -889,4 +893,24 @@ lum_to_pair(const float f)
         if (f < 0.0f) return 1;
         if (f > 1.0f) return LEN(grays);
         return 1 + (short)(f * LEN(grays) - 1);
+}
+
+void
+init_id_matrix(struct matrix *m)
+{
+    memset(m, (int)0.0f, sizeof (struct matrix));
+    for(int i = 0; i < 4; i++)
+        m->m[i][i] = 1.0f;
+}
+
+void
+init_reflection_matrix(bool x, bool y, bool z, struct matrix *m)
+{
+    init_id_matrix(m);
+    if (x)
+        m->m[0][0] = -1;
+    if (y)
+        m->m[1][1] = -1;
+    if (z)
+        m->m[2][2] = -1;
 }

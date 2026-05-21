@@ -73,10 +73,11 @@ void init_trans_matrix(float x, float y, float z, struct matrix *m);
 void init_reflection_matrix(bool x, bool y, bool z, struct matrix *m);
 void init_id_matrix(struct matrix *m);
 
+
 // -=[ RASTERIZATION FUNCTIONS ]=----------------------------------------------
-void line_draw(int x1, int y1, int x2, int y2, const cchar_t *wch);
-void tri_draw(const struct tri *t, const cchar_t *wch);
 void tri_fill(const struct tri *t, const cchar_t *wch);
+void tri_draw(const struct tri *t, const cchar_t *wch);
+void line_draw(int x1, int y1, int x2, int y2, const cchar_t *wch);
 
 
 // -=[ UTILITY FUNCTIONS ]=----------------------------------------------------
@@ -90,6 +91,9 @@ short lum_to_pair(const float f);
 static const short grays[] = { /*0,*/
      232, 233, 234, 235, 236, 237, 238, 239, 240, 241, 242, 243, 244,
      245, 246, 247, 248, 249, 250, 251, 252, 253, 254, 255, 15};
+static enum render_mode {WIREFRAME, X_RAY, SHADED, OUTLINED, NUM}
+    mode = SHADED;
+char *mode_str[NUM] = {"wireframe", "x-ray", "shaded", "outlined"};
 
 
 // -=[ MAIN ]=-----------------------------------------------------------------
@@ -101,6 +105,7 @@ main(int argc, char **argv)
         return 1;
     }
 
+    /* Load indicated meshes. */
     struct alist *meshes = alist_new(sizeof (struct mesh));
     size_t mesh_i = 0;
     for (int i = 1; i < argc && i < 8; i++) {
@@ -115,35 +120,11 @@ main(int argc, char **argv)
 
     ncurses_startup();
 
-    // Needed for the perspective transform.
-    float near = 0.1f;
-    float far = 1000.0f;
-    float fov = 75.0f;
-
-    struct matrix rot_z;
-    struct matrix rot_x;
-    struct matrix trans;
-
-    struct vec camera = {0};
-
-    // Colors
-    for (short i = 0; i < (short)LEN(grays); i++)
-         init_pair(i+1, grays[i], 0);
-
-    int y_max, x_max;
-    getmaxyx(stdscr, y_max, x_max);
-    unsigned long long frame_cnt = 0;
-    //float target_fps = 15;
-    struct alist *tris_to_draw = alist_new(sizeof (struct tri));
-
-    typedef enum render_mode {WIREFRAME, X_RAY, SHADED, OUTLINED, NUM} render_mode;
-    char *render_mode_str[NUM] = {"wireframe", "x-ray", "shaded", "outlined"};
-    render_mode mode = SHADED;
-
     // MAIN LOOP
+    struct alist *tris_to_draw = alist_new(sizeof (struct tri));
+    unsigned long long frame_cnt = 0;
     for( ;; ) {
-        getmaxyx(stdscr, y_max, x_max);
-
+        // INPUT
         int key_pressed = 0;
         while((key_pressed = getch()) != ERR) {
             switch(key_pressed) {
@@ -162,25 +143,30 @@ main(int argc, char **argv)
             }
         }
 
-        struct mesh *m_p = alist_get(meshes, mesh_i);
+        int y_max, x_max;
+        getmaxyx(stdscr, y_max, x_max);
 
-        // Transform needs to be recalculated in case the window size changes.
-        // The coeff to the aspect ratio is to correct for the fact that
-        // characters are typically taller than they are wide.
-        struct matrix mat_proj;
-        init_projection_matrix(fov, 2.0f * ((float)y_max / (float)x_max),
-                            near, far, &mat_proj);
+        // Needed for the perspective transform.
+        float near = 0.1f;
+        float far = 1000.0f;
+        float fov = 75.0f;
 
+        struct matrix rot_z;
+        struct matrix rot_x;
+        struct matrix trans;
         float theta = (float)frame_cnt / 15.0f / (0.5f * M_PIf);
         /* theta = 0.0f; */
 
-        init_rotx_matrix(theta, &rot_x);
         init_rotz_matrix(theta, &rot_z);
+        init_rotx_matrix(theta, &rot_x);
 
-        // Cull.
-        // Collect only the triangles we want to draw.
+        struct vec camera = {0};
+
+        struct mesh *m_p = alist_get(meshes, mesh_i);
+
         alist_clear(tris_to_draw, NULL);
 
+        // For each triangle of *m_p...
         for(int i = 0; i < m_p->len; i++) {
             // TODO we can calculate one world matrix and move it
             // outside of the for loop to drastically reduce the
@@ -189,11 +175,10 @@ main(int argc, char **argv)
             // we must use seperate vars for each input and output,
             // because mul_mat_vec assumes the input vector doesn't
             // change.
-            struct tri t = *(m_p->tris + i);
 
             // Rotate around z axis.
             struct tri rotated_z;
-            matrix_tri_mul(&rot_z, &t, &rotated_z);
+            matrix_tri_mul(&rot_z, (m_p->tris + i), &rotated_z);
 
             // Rotate around x axis.
             struct tri rotated_zx;
@@ -234,6 +219,13 @@ main(int argc, char **argv)
             struct vec light = { .xs = {0.5f, .75f, -1.0f, 0.0f} };
             vec_normalize(&light);
             float light_dp = vec_dot_prod(&normal, &light);
+
+            // Transform needs to be recalculated in case the window size changes.
+            // The coeff to the aspect ratio is to correct for the fact that
+            // characters are typically taller than they are wide.
+            struct matrix mat_proj;
+            init_projection_matrix(fov, 2.0f * ((float)y_max / (float)x_max),
+                                   near, far, &mat_proj);
 
             struct tri projected;
             // Apply perspective transform to each point,
@@ -310,7 +302,7 @@ main(int argc, char **argv)
         attr_set(A_NORMAL, 0, NULL);
 
         mvprintw(0, 2, "mesh name: %s", m_p->name);
-        mvprintw(1, 1, "rendermode: %s", render_mode_str[mode]);
+        mvprintw(1, 1, "rendermode: %s", mode_str[mode]);
         mvprintw(2, 2, "term size: %d col, %d row", x_max, y_max);
         mvprintw(3, 0, "frame count: %lld", frame_cnt);
         mvprintw(4, 3, "theta/pi: %1.2f", theta / M_PIf);
@@ -334,6 +326,17 @@ cleanup:
 
 
 // -=[ VECTOR AND MATRIX OPERATIONS ]=-----------------------------------------
+// Multiply each vector of triangle `t` with matrix `m`.
+// This is useful for applying a transform to a triangle.
+void
+matrix_tri_mul(const struct matrix *m, const struct tri *t, struct tri *to)
+{
+    for(short i = 0; i < 3; i++) {
+        matrix_vec_mul(m, &t->v[i], &to->v[i]);
+    }
+}
+
+
 void
 matrix_vec_mul(const struct matrix *m, const struct vec *i, struct vec *o)
 {
@@ -352,57 +355,6 @@ matrix_vec_mul(const struct matrix *m, const struct vec *i, struct vec *o)
 }
 
 
-// Multiply each vector of triangle `t` with matrix `m`.
-// This is useful for applying a transform to a triangle.
-void
-matrix_tri_mul(const struct matrix *m, const struct tri *t, struct tri *to)
-{
-    for(short i = 0; i < 3; i++) {
-        matrix_vec_mul(m, &t->v[i], &to->v[i]);
-    }
-}
-
-
-void
-vec_add(const struct vec *v1, const struct vec *v2, struct vec *vo)
-{
-    vo->x = v1->x + v2->x;
-    vo->y = v1->y + v2->y;
-    vo->z = v1->z + v2->z;
-    vo->w = v1->w + v2->w;
-}
-
-
-void
-vec_sub(const struct vec *v1, const struct vec *v2, struct vec *vo)
-{
-    vo->x = v1->x - v2->x;
-    vo->y = v1->y - v2->y;
-    vo->z = v1->z - v2->z;
-    vo->w = v1->w - v2->w;
-}
-
-
-void
-vec_scalar_mul(const struct vec *v, float f, struct vec *vo)
-{
-    vo->x = v->x * f;
-    vo->y = v->y * f;
-    vo->z = v->z * f;
-    vo->w = v->w * f;
-}
-
-
-void
-vec_scalar_div(const struct vec *v, float f, struct vec *vo)
-{
-    vo->x = v->x / f;
-    vo->y = v->y / f;
-    vo->z = v->z / f;
-    vo->w = v->w / f;
-}
-
-
 // Add vector `v` to every vector in triangle `t`.
 void
 tri_vec_add(const struct tri *t, const struct vec *v, struct tri *to)
@@ -416,8 +368,6 @@ tri_vec_add(const struct tri *t, const struct vec *v, struct tri *to)
     }
 }
 
-
-// Calculate the face normal for triange `t`.
 void
 tri_normal(const struct tri *t, struct vec *normal) {
     // Find triangle normal.
@@ -433,7 +383,58 @@ tri_normal(const struct tri *t, struct vec *normal) {
     vec_normalize(normal);
 }
 
-void vec_normalize(struct vec *v) {
+void vec_cross_prod(const struct vec *v1, const struct vec *v2, struct vec *vo)
+{
+    /* TODO Account for w. Or don't. */
+    vo->x = v1->y * v2->z - v1->z * v2->y;
+    vo->y = v1->z * v2->x - v1->x * v2->z;
+    vo->z = v1->x * v2->y - v1->y * v2->x;
+}
+
+float vec_dot_prod(const struct vec *v1, const struct vec *v2)
+{
+    /* TODO Account for w. Or don't. */
+    return v1->x*v2->x + v1->y*v2->y + v1->z*v2->z + v1->w*v2->w;
+}
+
+void
+vec_add(const struct vec *v1, const struct vec *v2, struct vec *vo)
+{
+    vo->x = v1->x + v2->x;
+    vo->y = v1->y + v2->y;
+    vo->z = v1->z + v2->z;
+    vo->w = v1->w + v2->w;
+}
+
+void
+vec_sub(const struct vec *v1, const struct vec *v2, struct vec *vo)
+{
+    vo->x = v1->x - v2->x;
+    vo->y = v1->y - v2->y;
+    vo->z = v1->z - v2->z;
+    vo->w = v1->w - v2->w;
+}
+
+void
+vec_scalar_mul(const struct vec *v, float f, struct vec *vo)
+{
+    vo->x = v->x * f;
+    vo->y = v->y * f;
+    vo->z = v->z * f;
+    vo->w = v->w * f;
+}
+
+void
+vec_scalar_div(const struct vec *v, float f, struct vec *vo)
+{
+    vo->x = v->x / f;
+    vo->y = v->y / f;
+    vo->z = v->z / f;
+    vo->w = v->w / f;
+}
+
+void vec_normalize(struct vec *v)
+{
     /*
      * TODO be more specific about which 'normalization' operation this does,
      * since in graphics it can mean a number of different things.
@@ -456,18 +457,6 @@ float vec_len(const struct vec *v) {
      * Cartesian vector.
      */
     return sqrtf(vec_dot_prod(v, v));
-}
-
-void vec_cross_prod(const struct vec *v1, const struct vec *v2, struct vec *vo) {
-    /* TODO Account for w. Or don't. */
-    vo->x = v1->y * v2->z - v1->z * v2->y;
-    vo->y = v1->z * v2->x - v1->x * v2->z;
-    vo->z = v1->x * v2->y - v1->y * v2->x;
-}
-
-float vec_dot_prod(const struct vec *v1, const struct vec *v2) {
-    /* TODO Account for w. Or don't. */
-    return v1->x*v2->x + v1->y*v2->y + v1->z*v2->z + v1->w*v2->w;
 }
 
 void
@@ -526,82 +515,30 @@ init_trans_matrix(float x, float y, float z, struct matrix *m)
     m->m[3][2] = z;
 }
 
+void
+init_reflection_matrix(bool x, bool y, bool z, struct matrix *m)
+{
+    init_id_matrix(m);
+    if (x)
+        m->m[0][0] = -1;
+    if (y)
+        m->m[1][1] = -1;
+    if (z)
+        m->m[2][2] = -1;
+}
+
+void
+init_id_matrix(struct matrix *m)
+{
+    memset(m, (int)0.0f, sizeof (struct matrix));
+    for(int i = 0; i < 4; i++)
+        m->m[i][i] = 1.0f;
+}
+
 
 // -=[ RASTERIZING FUNCTIONS ]=------------------------------------------------
 // adapted from:
 //   https://github.com/OneLoneCoder/Javidx9/tree/master/ConsoleGameEngine
-void
-line_draw(int x1, int y1, int x2, int y2, const cchar_t *wch)
-{
-    int x, y, dx, dy, dx1, dy1, px, py, xe, ye;
-
-    dx = x2 - x1; dy = y2 - y1;
-    dx1 = abs(dx); dy1 = abs(dy);
-    px = 2 * dy1 - dx1; py = 2 * dx1 - dy1;
-
-    if (dy1 <= dx1) {
-        if (dx >= 0) {
-            x = x1; y = y1; xe = x2;
-        }
-        else {
-            x = x2; y = y2; xe = x1;
-        }
-
-        mvadd_wch(y, x, wch);
-
-        for ( ; x<xe; ) {
-            x = x + 1;
-            if (px<0) {
-                px = px + 2 * dy1;
-            }
-            else {
-                if ((dx<0 && dy<0) || (dx>0 && dy>0)) {
-                    y = y + 1;
-                } else {
-                    y = y - 1;
-                }
-                px = px + 2 * (dy1 - dx1);
-            }
-            mvadd_wch(y, x, wch);
-        }
-    }
-    else {
-        if (dy >= 0) {
-            x = x1; y = y1; ye = y2;
-        }
-        else {
-            x = x2; y = y2; ye = y1;
-        }
-
-        mvadd_wch(y, x, wch);
-
-        for ( ; y<ye; ) {
-            y = y + 1;
-            if (py <= 0) {
-                py = py + 2 * dx1;
-            }
-            else {
-                if ((dx<0 && dy<0) || (dx>0 && dy>0)) {
-                    x = x + 1;
-                } else {
-                    x = x - 1;
-                }
-                py = py + 2 * (dx1 - dy1);
-            }
-            mvadd_wch(y, x, wch);
-        }
-    }
-}
-
-
-void
-tri_draw(const struct tri *t, const cchar_t *wch)
-{
-    line_draw((int)t->v[0].x, (int)t->v[0].y, (int)t->v[1].x, (int)t->v[1].y, wch);
-    line_draw((int)t->v[1].x, (int)t->v[1].y, (int)t->v[2].x, (int)t->v[2].y, wch);
-    line_draw((int)t->v[2].x, (int)t->v[2].y, (int)t->v[0].x, (int)t->v[0].y, wch);
-}
-
 // adapted from:
 //   https://github.com/OneLoneCoder/Javidx9/tree/master/ConsoleGameEngine
 // which was adapted from:
@@ -767,6 +704,77 @@ tri_fill(const struct tri *t, const cchar_t *wch)
     }
 }
 
+void
+tri_draw(const struct tri *t, const cchar_t *wch)
+{
+    line_draw((int)t->v[0].x, (int)t->v[0].y, (int)t->v[1].x, (int)t->v[1].y, wch);
+    line_draw((int)t->v[1].x, (int)t->v[1].y, (int)t->v[2].x, (int)t->v[2].y, wch);
+    line_draw((int)t->v[2].x, (int)t->v[2].y, (int)t->v[0].x, (int)t->v[0].y, wch);
+}
+
+void
+line_draw(int x1, int y1, int x2, int y2, const cchar_t *wch)
+{
+    int x, y, dx, dy, dx1, dy1, px, py, xe, ye;
+
+    dx = x2 - x1; dy = y2 - y1;
+    dx1 = abs(dx); dy1 = abs(dy);
+    px = 2 * dy1 - dx1; py = 2 * dx1 - dy1;
+
+    if (dy1 <= dx1) {
+        if (dx >= 0) {
+            x = x1; y = y1; xe = x2;
+        }
+        else {
+            x = x2; y = y2; xe = x1;
+        }
+
+        mvadd_wch(y, x, wch);
+
+        for ( ; x<xe; ) {
+            x = x + 1;
+            if (px<0) {
+                px = px + 2 * dy1;
+            }
+            else {
+                if ((dx<0 && dy<0) || (dx>0 && dy>0)) {
+                    y = y + 1;
+                } else {
+                    y = y - 1;
+                }
+                px = px + 2 * (dy1 - dx1);
+            }
+            mvadd_wch(y, x, wch);
+        }
+    }
+    else {
+        if (dy >= 0) {
+            x = x1; y = y1; ye = y2;
+        }
+        else {
+            x = x2; y = y2; ye = y1;
+        }
+
+        mvadd_wch(y, x, wch);
+
+        for ( ; y<ye; ) {
+            y = y + 1;
+            if (py <= 0) {
+                py = py + 2 * dx1;
+            }
+            else {
+                if ((dx<0 && dy<0) || (dx>0 && dy>0)) {
+                    x = x + 1;
+                } else {
+                    x = x - 1;
+                }
+                py = py + 2 * (dx1 - dy1);
+            }
+            mvadd_wch(y, x, wch);
+        }
+    }
+}
+
 
 // -=[ UTILITY FUNCTIONS ]=----------------------------------------------------
 void
@@ -788,14 +796,17 @@ ncurses_startup()
     scrollok(stdscr, FALSE);
     keypad(stdscr, TRUE);
 
-    // color
     start_color();
     /* If a terminal has a transparent bg, this will keep it transparent. */
     /* use_default_colors(); */
+
+    // Colors
+    for (short i = 0; i < (short)LEN(grays); i++)
+         init_pair(i+1, grays[i], 0);
 }
 
-
-bool load_mesh(const char *path, struct mesh *m) {
+bool load_mesh(const char *path, struct mesh *m)
+{
     /* Does path exist and can it be read? */
     if (access(path, R_OK) != 0)
         return false;
@@ -893,24 +904,4 @@ lum_to_pair(const float f)
         if (f < 0.0f) return 1;
         if (f > 1.0f) return LEN(grays);
         return 1 + (short)(f * LEN(grays) - 1);
-}
-
-void
-init_id_matrix(struct matrix *m)
-{
-    memset(m, (int)0.0f, sizeof (struct matrix));
-    for(int i = 0; i < 4; i++)
-        m->m[i][i] = 1.0f;
-}
-
-void
-init_reflection_matrix(bool x, bool y, bool z, struct matrix *m)
-{
-    init_id_matrix(m);
-    if (x)
-        m->m[0][0] = -1;
-    if (y)
-        m->m[1][1] = -1;
-    if (z)
-        m->m[2][2] = -1;
 }

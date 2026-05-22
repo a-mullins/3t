@@ -37,7 +37,7 @@ struct tri {
 
 struct mesh {
 	struct alist *tris;
-	char name[32];
+	char name[128];
 	float radius;
 };
 
@@ -104,7 +104,6 @@ static const char *mode_str[NUM] = {"wireframe", "x-ray", "shaded",
 int
 main(int argc, char **argv)
 {
-	getchar();
 	if (argc <= 1) {
 		printf("usage: %s <model.obj>\n", argv[0]);
 		return 0;
@@ -116,7 +115,7 @@ main(int argc, char **argv)
 	for (int i = 1; i < argc; i++) {
 		struct mesh m;
 		init_mesh(&m);
-		strncpy(m.name, argv[i], sizeof (char) * 32);
+		strncpy(m.name, argv[i], sizeof (char) * 128);
 		if (load_mesh(argv[i], &m)) {
 			fprintf(stderr, "%s: error loading mesh at \"%s\"\n",
 				argv[0], argv[1]);

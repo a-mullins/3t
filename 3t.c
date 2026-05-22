@@ -30,15 +30,14 @@ struct vec {
 
 struct tri {
 	union {
-		struct { struct vec v0; struct vec v1; struct vec v3; };
+		struct { struct vec v0; struct vec v1; struct vec v2; };
 		struct vec v[3];
 	};
 };
 
 struct mesh {
-	struct tri *tris;
+	struct alist *tris;
 	char name[32];
-	int len;
 	float radius;
 };
 
@@ -85,7 +84,8 @@ void	line_draw(int x1, int y1, int x2, int y2, const cchar_t *wch);
 
 /* -=[ UTILITY FUNCTIONS ]=-------------------------------------------------- */
 void	ncurses_startup();
-bool	load_mesh(const char *path, struct mesh *m);
+void	init_mesh(struct mesh *m);
+int	load_mesh(const char *path, struct mesh *m);
 int	z_cmp(const void *a, const void *b);
 short	lum_to_pair(const float f);
 
@@ -104,19 +104,22 @@ static const char *mode_str[NUM] = {"wireframe", "x-ray", "shaded",
 int
 main(int argc, char **argv)
 {
+	getchar();
 	if (argc <= 1) {
 		printf("usage: %s <model.obj>\n", argv[0]);
-		return 1;
+		return 0;
 	}
 
 	/* Load indicated meshes. */
 	struct alist *meshes = alist_new(sizeof (struct mesh));
 	size_t mesh_i = 0;
-	for (int i = 1; i < argc && i < 8; i++) {
-		struct mesh m = {0};
-		if (load_mesh(argv[i], &m) == false) {
+	for (int i = 1; i < argc; i++) {
+		struct mesh m;
+		init_mesh(&m);
+		strncpy(m.name, argv[i], sizeof (char) * 32);
+		if (load_mesh(argv[i], &m)) {
 			fprintf(stderr, "%s: error loading mesh at \"%s\"\n",
-				argv[0], argv[i]);
+				argv[0], argv[1]);
 			return 1;
 		}
 		alist_push(meshes, &m);
@@ -168,13 +171,12 @@ main(int argc, char **argv)
 
 		struct vec camera = {0};
 
-		struct mesh *m_p = alist_get(meshes, mesh_i);
-
 		alist_clear(tris_to_draw, NULL);
 
-		/* For each triangle of *m_p... */
-		for (int i = 0; i < m_p->len; i++) {
-			/* 
+		/* For each triangle of mesh... */
+		struct mesh *m_p = alist_get(meshes, mesh_i);
+		for (size_t i = 0; i < alist_len(m_p->tris); i++) {
+			/*
 			 * TODO we can calculate one world matrix and move it
 			 * outside of the for loop to drastically reduce the
 			 * number of calculations.
@@ -185,10 +187,10 @@ main(int argc, char **argv)
 			 * because mul_mat_vec assumes the input vector doesn't
 			 * change.
 			 */
-			
+
 			/* Rotate around z axis. */
 			struct tri rotated_z;
-			matrix_tri_mul(&rot_z, (m_p->tris + i), &rotated_z);
+			matrix_tri_mul(&rot_z, alist_get(m_p->tris, i), &rotated_z);
 
 			/* Rotate around x axis. */
 			struct tri rotated_zx;
@@ -312,7 +314,8 @@ main(int argc, char **argv)
 		}
 		attr_set(A_NORMAL, 0, NULL);
 
-		mvprintw(0, 2, "mesh name: %s", m_p->name);
+		mvprintw(0, 2, "mesh name: %s",
+			 ((struct mesh *)alist_get(meshes, mesh_i))->name);
 		mvprintw(1, 1, "rendermode: %s", mode_str[mode]);
 		mvprintw(2, 2, "term size: %d col, %d row", x_max, y_max);
 		mvprintw(3, 0, "frame count: %lld", frame_cnt);
@@ -821,83 +824,68 @@ ncurses_startup()
 		init_pair(i+1, grays[i], 0);
 }
 
-bool load_mesh(const char *path, struct mesh *m)
+void
+init_mesh(struct mesh *m)
+{
+	m->tris = alist_new(sizeof (struct tri));
+	memset(m->name, 0, sizeof (char) * 32);
+	m->radius = 0.0f;
+}
+
+int
+load_mesh(const char *path, struct mesh *m)
 {
 	/* Does path exist and can it be read? */
 	if (access(path, R_OK) != 0)
-		return false;
+		return 1;
 
 	/* Is it a regular file? */
 	struct stat sb;
 	stat(path, &sb);
 	if (!S_ISREG(sb.st_mode))
-		return false;
+		return 1;
 
 	/* fopen still might fail for a number of reasons. */
 	FILE *fp = fopen(path, "r");
 	if (fp == NULL)
-		return false;
-
-	float radius = 0.0f;
-
-	size_t vec_cap = 16;
-	size_t vec_len = 0;
-	struct vec *vecs = calloc(vec_cap, sizeof (struct vec));
-
-	char line[80];
+		return 1;
 
 	/* Scan for verticies. */
+	struct alist *vecs = alist_new(sizeof (struct vec));
+	float d_max = 0.0f;
+	char line[80];
 	while (fgets(line, 80, fp) != NULL) {
 		if (line[0] != 'v') { continue; }
 
 		struct vec v = { .xs = {0.0f, 0.0f, 0.0f, 1.0f}};
 		sscanf(line, "v %f %f %f", &v.x, &v.y, &v.z);
 
-		if (vec_len + 1 >= vec_cap) {
-			vec_cap <<= 1;
-			vecs = realloc(vecs, vec_cap * sizeof (struct vec));
-		}
-		*(vecs + vec_len) = v;
-		vec_len++;
+		alist_push(vecs, &v);
 
-		float dist = cbrtf(powf(v.x, 3) + powf(v.y, 3) + powf(v.z, 3));
-		if (dist > radius)
-			radius = dist;
+		float d = vec_len(&v);
+		if (d > d_max)
+			d_max = d;
 	}
+	m->radius = d_max;
 
 	rewind(fp);
 
-	size_t tri_cap = 16;
-	size_t tri_len = 0;
-	struct tri *tris = calloc(tri_cap, sizeof (struct tri));
-
 	/* Scan for faces. */
 	struct tri t;
-	int i_x, i_y, i_z;
+	size_t i_x, i_y, i_z;
 	while (fgets(line, 80, fp) != NULL) {
 		if (line[0] != 'f') { continue; }
 
-		sscanf(line, "f %d %d %d", &i_x, &i_y, &i_z);
-		t.v[0] = *(vecs + i_x - 1);
-		t.v[1] = *(vecs + i_y - 1);
-		t.v[2] = *(vecs + i_z - 1);
+		sscanf(line, "f %zu %zu %zu", &i_x, &i_y, &i_z);
+		t.v0 = *(struct vec *)alist_get(vecs, --i_x);
+		t.v1 = *(struct vec *)alist_get(vecs, --i_y);
+		t.v2 = *(struct vec *)alist_get(vecs, --i_z);
 
-		if (tri_len + 1 >= tri_cap) {
-			tri_cap <<= 1;
-			tris = realloc(tris, tri_cap * sizeof (struct tri));
-		}
-
-		*(tris + tri_len) = t;
-		tri_len++;
+		alist_push(m->tris, &t);
 	}
 
-	m->tris = calloc(tri_len, sizeof (struct tri));
-	m->len = (int)tri_len;
-	strncpy(m->name, path, 32);
-	m->radius = radius;
-	memcpy(m->tris, tris, tri_len * sizeof (struct tri));
-
-	return true;
+	alist_free(vecs, NULL);
+	return 0;
 }
 
 int

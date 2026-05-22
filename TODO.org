@@ -1,8 +1,6 @@
 #+STARTUP: content indent
 * TODO [#A] Implement Bresenham's and Scanline.
 * TODO [#A] Implement drawing with Unicode Block Elements.
-* TODO [#A] Refactor struct mesh to use struct alist *.
-Maybe include a method to shrink an alist so capacity == len.
 * TODO [#A] Use lex/yacc to write a proper parser for OBJ files.
 * TODO Refactor from row-vects to col-vects.
 It is confusing. Most of the literature assumes column vectors, but javid is using row vectors.
@@ -13,6 +11,8 @@ Whenever a triangle protrudes through the viewing plane it causes artifacting. P
 That way other struct fields will ride along and don't need to be explicity copied. Also the operations can be more easily chained.
 * TODO WASD to fly the camera around.
 * TODO UBSan, linting, CUnit.
+* DONE Refactor struct mesh to use struct alist *.
+Maybe include a method to shrink an alist so capacity == len.
 * DONE Refactor functions to <noun>_<verb> for better sorting (again).
 * DONE Refactor (struct tri).p to .v (for vertex/vector, not point)
 * DONE Refactor vec4 -> vec, mat4x4 -> mat
